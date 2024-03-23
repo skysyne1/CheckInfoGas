@@ -41,6 +41,8 @@
             importToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             numThread = new System.Windows.Forms.NumericUpDown();
             label1 = new System.Windows.Forms.Label();
+            tbProxy = new System.Windows.Forms.TextBox();
+            label2 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)dgv).BeginInit();
             contextMenuStrip1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numThread).BeginInit();
@@ -48,10 +50,10 @@
             // 
             // btnStart
             // 
-            btnStart.Location = new System.Drawing.Point(10, 12);
-            btnStart.Margin = new System.Windows.Forms.Padding(2);
+            btnStart.Location = new System.Drawing.Point(11, 16);
+            btnStart.Margin = new System.Windows.Forms.Padding(2, 3, 2, 3);
             btnStart.Name = "btnStart";
-            btnStart.Size = new System.Drawing.Size(97, 30);
+            btnStart.Size = new System.Drawing.Size(111, 40);
             btnStart.TabIndex = 0;
             btnStart.Text = "Start";
             btnStart.UseVisualStyleBackColor = true;
@@ -60,21 +62,24 @@
             // cbLQ
             // 
             cbLQ.AutoSize = true;
-            cbLQ.Location = new System.Drawing.Point(448, 18);
-            cbLQ.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            cbLQ.Enabled = false;
+            cbLQ.Location = new System.Drawing.Point(394, 23);
+            cbLQ.Margin = new System.Windows.Forms.Padding(5, 4, 5, 4);
             cbLQ.Name = "cbLQ";
-            cbLQ.Size = new System.Drawing.Size(77, 19);
+            cbLQ.Size = new System.Drawing.Size(92, 24);
             cbLQ.TabIndex = 2;
+            cbLQ.Tag = "";
             cbLQ.Text = "Check LQ";
             cbLQ.UseVisualStyleBackColor = true;
             // 
             // cbInfo
             // 
             cbInfo.AutoSize = true;
-            cbInfo.Location = new System.Drawing.Point(350, 18);
-            cbInfo.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            cbInfo.Enabled = false;
+            cbInfo.Location = new System.Drawing.Point(282, 23);
+            cbInfo.Margin = new System.Windows.Forms.Padding(5, 4, 5, 4);
             cbInfo.Name = "cbInfo";
-            cbInfo.Size = new System.Drawing.Size(83, 19);
+            cbInfo.Size = new System.Drawing.Size(100, 24);
             cbInfo.TabIndex = 3;
             cbInfo.Text = "Check Info";
             cbInfo.UseVisualStyleBackColor = true;
@@ -87,86 +92,112 @@
             dgv.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             dgv.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] { cStt, cUsername, cPassword, cStatus });
             dgv.ContextMenuStrip = contextMenuStrip1;
-            dgv.Location = new System.Drawing.Point(14, 65);
-            dgv.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            dgv.Location = new System.Drawing.Point(16, 87);
+            dgv.Margin = new System.Windows.Forms.Padding(5, 4, 5, 4);
             dgv.Name = "dgv";
             dgv.RowHeadersVisible = false;
+            dgv.RowHeadersWidth = 51;
             dgv.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            dgv.Size = new System.Drawing.Size(720, 344);
+            dgv.Size = new System.Drawing.Size(823, 459);
             dgv.TabIndex = 1;
             // 
             // cStt
             // 
             cStt.FillWeight = 25F;
             cStt.HeaderText = "#";
+            cStt.MinimumWidth = 6;
             cStt.Name = "cStt";
             // 
             // cUsername
             // 
             cUsername.FillWeight = 50F;
             cUsername.HeaderText = "Username";
+            cUsername.MinimumWidth = 6;
             cUsername.Name = "cUsername";
             // 
             // cPassword
             // 
             cPassword.FillWeight = 50F;
             cPassword.HeaderText = "Password";
+            cPassword.MinimumWidth = 6;
             cPassword.Name = "cPassword";
             // 
             // cStatus
             // 
             cStatus.FillWeight = 130F;
             cStatus.HeaderText = "Status";
+            cStatus.MinimumWidth = 6;
             cStatus.Name = "cStatus";
             // 
             // contextMenuStrip1
             // 
+            contextMenuStrip1.ImageScalingSize = new System.Drawing.Size(20, 20);
             contextMenuStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { importToolStripMenuItem });
             contextMenuStrip1.Name = "contextMenuStrip1";
-            contextMenuStrip1.Size = new System.Drawing.Size(111, 26);
+            contextMenuStrip1.Size = new System.Drawing.Size(124, 28);
             // 
             // importToolStripMenuItem
             // 
             importToolStripMenuItem.Name = "importToolStripMenuItem";
-            importToolStripMenuItem.Size = new System.Drawing.Size(110, 22);
+            importToolStripMenuItem.Size = new System.Drawing.Size(123, 24);
             importToolStripMenuItem.Text = "Import";
             importToolStripMenuItem.Click += importToolStripMenuItem_Click;
             // 
             // numThread
             // 
-            numThread.Location = new System.Drawing.Point(182, 16);
-            numThread.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            numThread.Location = new System.Drawing.Point(208, 21);
+            numThread.Margin = new System.Windows.Forms.Padding(5, 4, 5, 4);
             numThread.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
             numThread.Name = "numThread";
-            numThread.Size = new System.Drawing.Size(56, 23);
+            numThread.Size = new System.Drawing.Size(64, 27);
             numThread.TabIndex = 4;
             numThread.Value = new decimal(new int[] { 1, 0, 0, 0 });
             // 
             // label1
             // 
             label1.AutoSize = true;
-            label1.Location = new System.Drawing.Point(114, 18);
-            label1.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            label1.Location = new System.Drawing.Point(130, 24);
+            label1.Margin = new System.Windows.Forms.Padding(5, 0, 5, 0);
             label1.Name = "label1";
-            label1.Size = new System.Drawing.Size(57, 15);
+            label1.Size = new System.Drawing.Size(71, 20);
             label1.TabIndex = 5;
             label1.Text = "Số luồng:";
             // 
+            // tbProxy
+            // 
+            tbProxy.Location = new System.Drawing.Point(552, 21);
+            tbProxy.Name = "tbProxy";
+            tbProxy.PlaceholderText = "Ip:Port:Username:Password";
+            tbProxy.Size = new System.Drawing.Size(287, 27);
+            tbProxy.TabIndex = 6;
+            // 
+            // label2
+            // 
+            label2.AutoSize = true;
+            label2.Location = new System.Drawing.Point(496, 24);
+            label2.Margin = new System.Windows.Forms.Padding(5, 0, 5, 0);
+            label2.Name = "label2";
+            label2.Size = new System.Drawing.Size(48, 20);
+            label2.TabIndex = 7;
+            label2.Text = "Proxy:";
+            // 
             // Form1
             // 
-            AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
+            AutoScaleDimensions = new System.Drawing.SizeF(8F, 20F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            ClientSize = new System.Drawing.Size(765, 422);
+            ClientSize = new System.Drawing.Size(874, 563);
+            Controls.Add(label2);
+            Controls.Add(tbProxy);
             Controls.Add(label1);
             Controls.Add(numThread);
             Controls.Add(dgv);
             Controls.Add(cbInfo);
             Controls.Add(cbLQ);
             Controls.Add(btnStart);
-            Margin = new System.Windows.Forms.Padding(2);
+            Margin = new System.Windows.Forms.Padding(2, 3, 2, 3);
             Name = "Form1";
             StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            Text = "Form1";
+            Text = "Tool Check Liên Quân By Ngọc Sơn";
             ((System.ComponentModel.ISupportInitialize)dgv).EndInit();
             contextMenuStrip1.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)numThread).EndInit();
@@ -188,6 +219,8 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn cUsername;
         private System.Windows.Forms.DataGridViewTextBoxColumn cPassword;
         private System.Windows.Forms.DataGridViewTextBoxColumn cStatus;
+        private System.Windows.Forms.TextBox tbProxy;
+        private System.Windows.Forms.Label label2;
     }
 }
 
