@@ -18,7 +18,6 @@ namespace CheckInfoGas
 {
     public partial class Form1 : Form
     {
-
         public Form1(string permission)
         {
             this.Permission = permission;
@@ -35,6 +34,8 @@ namespace CheckInfoGas
         private string Proxy2 { get; set; } = "";
 
         private string Permission { get; set; }
+
+        private string FilePath { get; set; }
 
         private System.Timers.Timer timer;
 
@@ -724,8 +725,6 @@ namespace CheckInfoGas
             return Regex.Match(cookie, "datadome=(.*?);").Groups[1].Value;
         }
 
-        private string FilePath;
-
         private async void importToolStripMenuItem_Click(object sender, EventArgs e)
         {
             OpenFileDialog openFileDialog = new();
@@ -733,7 +732,7 @@ namespace CheckInfoGas
             {
                 FilePath = openFileDialog.FileName;
                 var accounts2 = await File.ReadAllLinesAsync(FilePath);
-                Accounts = accounts2.Where(x => !string.IsNullOrEmpty(x) && x.Split('|').Length > 2).ToArray();
+                Accounts = accounts2.Where(x => !string.IsNullOrEmpty(x) && x.Split('|').Length >= 2).ToArray();
 
                 MessageBox.Show("Load Xong");
             }
