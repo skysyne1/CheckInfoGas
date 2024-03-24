@@ -18,22 +18,29 @@ namespace CheckInfoGas
 {
     public partial class Form1 : Form
     {
-        private System.Timers.Timer timer;
-        List<Task> tasks { get; set; }
-        string[] Accounts { get; set; }
+
         public Form1(string permission)
         {
             this.Permission = permission;
             InitializeComponent();
             SetPermission();
-            tasks = new List<Task>();
+            Tasks = new List<Task>();
         }
 
         CancellationTokenSource CancellationTokenSource;
         private string Proxy { get; set; }
+
         private string ApiKey { get; set; }
+
         private string Proxy2 { get; set; } = "";
+
         private string Permission { get; set; }
+
+        private System.Timers.Timer timer;
+
+        List<Task> Tasks { get; set; }
+
+        string[] Accounts { get; set; }
 
         void SetPermission()
         {
@@ -57,6 +64,7 @@ namespace CheckInfoGas
                     break;
             }
         }
+
         private void btnStart_Click(object sender, EventArgs e)
         {
             if (btnStart.Text == "Start")
@@ -118,7 +126,7 @@ namespace CheckInfoGas
                     }));
                     DataGridViewRow row = dgv.Rows[add];
                     await semaphore.WaitAsync();
-                    tasks.Add(Task.Run(async () =>
+                    Tasks.Add(Task.Run(async () =>
                     {
                         try
                         {
@@ -130,11 +138,9 @@ namespace CheckInfoGas
                         }
                     }));
                 }
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(Tasks);
                 MessageBox.Show("Xong");
             });
-
-
         }
 
         private async Task CheckPerThread(DataGridViewRow row, string account, string password)
@@ -722,7 +728,7 @@ namespace CheckInfoGas
 
         private async void importToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            OpenFileDialog openFileDialog = new OpenFileDialog();
+            OpenFileDialog openFileDialog = new();
             if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
                 FilePath = openFileDialog.FileName;
