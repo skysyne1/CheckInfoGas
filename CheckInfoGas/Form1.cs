@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -21,7 +20,7 @@ namespace CheckInfoGas
     {
         private System.Timers.Timer timer;
         List<Task> tasks { get; set; }
-        string[] accounts { get; set; }
+        string[] Accounts { get; set; }
         public Form1(string permission)
         {
             this.Permission = permission;
@@ -64,13 +63,15 @@ namespace CheckInfoGas
             {
                 if (cbProxy.Checked)
                 {
+                    ApiKey = tbApiKey.Text;
+                    GetNewProxy(null, null);
                     timer = new System.Timers.Timer(TimeSpan.FromMinutes(30).TotalMilliseconds);
                     timer.Elapsed += GetNewProxy;
                     timer.Start();
                 }
                 btnStart.Text = "Stop";
                 var proxy = tbProxy.Text;
-                
+
                 CancellationTokenSource = new CancellationTokenSource();
                 if (!string.IsNullOrEmpty(FilePath) && !string.IsNullOrEmpty(proxy))
                 {
@@ -101,7 +102,7 @@ namespace CheckInfoGas
             await Task.Run(async () =>
             {
                 var semaphore = new SemaphoreSlim(maxThread, (maxThread * 2));
-                foreach (var line in accounts)
+                foreach (var line in Accounts)
                 {
                     if (CancellationTokenSource.IsCancellationRequested)
                         break;
@@ -129,7 +130,7 @@ namespace CheckInfoGas
                         }
                     }));
                 }
-                Task.WaitAll(tasks.ToArray());
+                await Task.WhenAll(tasks);
                 MessageBox.Show("Xong");
             });
 
@@ -229,7 +230,7 @@ namespace CheckInfoGas
                             if (cbInfo.Checked)
                             {
                                 var cookies = http.Cookies.ToDictionary(x => x.Key, x => x.Value);
-                                
+
                                 var (infoStatus, mailStatus, fbStatus, idCard) = CheckInfoAccount(cookies, Proxy2);
 
                                 switch (infoStatus)
@@ -418,7 +419,7 @@ namespace CheckInfoGas
                     }
                     catch { }
                 }
-
+                http.Proxy = HttpProxyClient.Parse(proxy);
                 var urlCheckInfo = "https://account.garena.com/api/account/init";
                 var responseInfo = http.Get(urlCheckInfo).ToString();
                 var initObject = JObject.Parse(responseInfo);
@@ -652,7 +653,7 @@ namespace CheckInfoGas
                     "}",
                 });
                 string response = this.RequestPost("https://tmproxy.com/api/proxy/get-new-proxy", param);
-                if (string.IsNullOrEmpty(response))
+                if (!string.IsNullOrEmpty(response))
                 {
                     var jObject = JObject.Parse(response);
                     if (jObject["code"].ToString() == "0")
@@ -667,7 +668,7 @@ namespace CheckInfoGas
                     {
                         Proxy2 = GetCurrentProxy(ApiKey);
                     }
-                }    
+                }
             }
             catch { }
         }
@@ -721,14 +722,12 @@ namespace CheckInfoGas
 
         private async void importToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            var semaphore = new SemaphoreSlim(10000, 10000);
-            var taskt = new List<Task>();
             OpenFileDialog openFileDialog = new OpenFileDialog();
             if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
                 FilePath = openFileDialog.FileName;
                 var accounts2 = await File.ReadAllLinesAsync(FilePath);
-                accounts = accounts2.Where(x => !string.IsNullOrEmpty(x) && x.Split('|').Length > 2).ToArray();
+                Accounts = accounts2.Where(x => !string.IsNullOrEmpty(x) && x.Split('|').Length > 2).ToArray();
 
                 MessageBox.Show("Load Xong");
             }
@@ -740,10 +739,7 @@ namespace CheckInfoGas
 
         private void cbProxy_CheckedChanged(object sender, EventArgs e)
         {
-            if (cbProxy.Checked)
-            {
-                Process.Start("Proxy.txt");
-            }
+
         }
     }
 }

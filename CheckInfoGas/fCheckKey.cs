@@ -38,7 +38,7 @@ namespace CheckInfoGas
 
         private async Task<(bool, DateTime?)> CheckKey(string licenseKey)
         {
-            var response = await new WebClient().DownloadStringTaskAsync(new Uri("https://docs.google.com/spreadsheets/d/19vkERubz9z2qw8nEWRoYdribSIN5gFCGcgIjOKDikuk/edit#gid=0"));
+            var response = await new WebClient().DownloadStringTaskAsync(new Uri("https://docs.google.com/spreadsheets/d/1YP_ySW1jhzxLn7gL3Ux9xw9cVRFpGCHIdMPrqwoAYlc/edit#gid=0"));
             var data = Regex.Match(response, $"\\\"{licenseKey}(.*?)\"").Groups[1].Value.Split('|');
             if (data.Length < 2)
             {
@@ -86,7 +86,7 @@ namespace CheckInfoGas
         {
             byte[] bytes = Encoding.UTF8.GetBytes(toEncrypt);
             new AppSettingsReader();
-            string s = "#ShynDeepTry#";
+            string s = "#ShynDeepTryCheckGas#";
             byte[] key;
             if (useHashing)
             {

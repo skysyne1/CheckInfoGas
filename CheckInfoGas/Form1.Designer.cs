@@ -44,6 +44,8 @@
             tbProxy = new System.Windows.Forms.TextBox();
             label2 = new System.Windows.Forms.Label();
             cbProxy = new System.Windows.Forms.CheckBox();
+            tbApiKey = new System.Windows.Forms.TextBox();
+            label3 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)dgv).BeginInit();
             contextMenuStrip1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numThread).BeginInit();
@@ -52,7 +54,7 @@
             // btnStart
             // 
             btnStart.Location = new System.Drawing.Point(10, 12);
-            btnStart.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            btnStart.Margin = new System.Windows.Forms.Padding(2);
             btnStart.Name = "btnStart";
             btnStart.Size = new System.Drawing.Size(97, 30);
             btnStart.TabIndex = 0;
@@ -99,7 +101,7 @@
             dgv.RowHeadersVisible = false;
             dgv.RowHeadersWidth = 51;
             dgv.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            dgv.Size = new System.Drawing.Size(931, 358);
+            dgv.Size = new System.Drawing.Size(1300, 449);
             dgv.TabIndex = 1;
             // 
             // cStt
@@ -166,7 +168,7 @@
             // 
             // tbProxy
             // 
-            tbProxy.Location = new System.Drawing.Point(639, 18);
+            tbProxy.Location = new System.Drawing.Point(583, 16);
             tbProxy.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             tbProxy.Name = "tbProxy";
             tbProxy.PlaceholderText = "Ip:Port:Username:Password";
@@ -176,12 +178,12 @@
             // label2
             // 
             label2.AutoSize = true;
-            label2.Location = new System.Drawing.Point(590, 20);
+            label2.Location = new System.Drawing.Point(497, 19);
             label2.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             label2.Name = "label2";
-            label2.Size = new System.Drawing.Size(40, 15);
+            label2.Size = new System.Drawing.Size(79, 15);
             label2.TabIndex = 7;
-            label2.Text = "Proxy:";
+            label2.Text = "Proxy bypass:";
             // 
             // cbProxy
             // 
@@ -196,11 +198,30 @@
             cbProxy.UseVisualStyleBackColor = true;
             cbProxy.CheckedChanged += cbProxy_CheckedChanged;
             // 
+            // tbApiKey
+            // 
+            tbApiKey.Location = new System.Drawing.Point(942, 17);
+            tbApiKey.Name = "tbApiKey";
+            tbApiKey.Size = new System.Drawing.Size(242, 23);
+            tbApiKey.TabIndex = 9;
+            // 
+            // label3
+            // 
+            label3.AutoSize = true;
+            label3.Location = new System.Drawing.Point(887, 20);
+            label3.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            label3.Name = "label3";
+            label3.Size = new System.Drawing.Size(48, 15);
+            label3.TabIndex = 10;
+            label3.Text = "Api TM:";
+            // 
             // Form1
             // 
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            ClientSize = new System.Drawing.Size(956, 422);
+            ClientSize = new System.Drawing.Size(1325, 513);
+            Controls.Add(label3);
+            Controls.Add(tbApiKey);
             Controls.Add(cbProxy);
             Controls.Add(dgv);
             Controls.Add(label2);
@@ -210,7 +231,7 @@
             Controls.Add(cbInfo);
             Controls.Add(cbLQ);
             Controls.Add(btnStart);
-            Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            Margin = new System.Windows.Forms.Padding(2);
             Name = "Form1";
             StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             Text = "Tool Check Liên Quân By Ngọc Sơn";
@@ -238,6 +259,8 @@
         private System.Windows.Forms.TextBox tbProxy;
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.CheckBox cbProxy;
+        private System.Windows.Forms.TextBox tbApiKey;
+        private System.Windows.Forms.Label label3;
     }
 }
 
