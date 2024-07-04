@@ -68,6 +68,7 @@ namespace CheckInfoGas
 
         private void btnStart_Click(object sender, EventArgs e)
         {
+            CheckPerTask(null, "boyboykeypo@gmail.com", "boychua123");
             if (btnStart.Text == "Start")
             {
                 if (cbProxy.Checked)
@@ -154,15 +155,19 @@ namespace CheckInfoGas
                     var http = new HttpRequest
                     {
                         Cookies = new CookieDictionary(),
+                        KeepAlive = true,
+                        EnableEncodingContent = true,
+                        UserAgent = "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+                        Referer = "https://sso.garena.com/universal/login?app_id=10100&redirect_uri=https%3A%2F%2Faccount.garena.com%2F&locale=vi-VN"
                     };
 
-                    int i = 3; string v1 = string.Empty; string v2 = string.Empty;
+                    int i = 30; string v1 = string.Empty; string v2 = string.Empty;
                     SetStatusDataGridView(row, "Get V1, v2");
                     while (i > 0)
                     {
                         (v1, v2) = GetDataHashPassword(account);
 
-                        if (!string.IsNullOrEmpty(v1) && !string.IsNullOrEmpty(v2) && !v1.Equals("error_no_account"))
+                        if (!string.IsNullOrEmpty(v1) && !string.IsNullOrEmpty(v2) || v1.Equals("error_no_account"))
                         {
                             // Continue with the rest of the code
                             break;
@@ -175,24 +180,6 @@ namespace CheckInfoGas
                         SetStatusDataGridView(row, "V1, v2 is null");
                         break;
                     }
-
-                    //var headers = new Dictionary<string, string>
-                    //    {
-                    //        {"Accept", "application/json, text/plain, */*"},
-                    //        {"Accept-Language", "vi,vi-VN;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5"},
-                    //        {"Cookie", "_ga=GA1.1.1629491323.1706450848; token_session=c17e119c61460aab0b4a2024157a11b244f5430627c9566b0a8f702adb5f573a3edc9cb577dc1f4dbbe5f948e18d8c6e; _ga_1M7M9L6VPX=GS1.1.1708017064.12.1.1708017065.0.0.0; datadome=" + GetDataDome()},
-                    //        {"Sec-Fetch-Dest", "empty"},
-                    //        {"Sec-Fetch-Mode", "cors"},
-                    //        {"Sec-Fetch-Site", "same-origin"},
-                    //        {"sec-ch-ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\""},
-                    //        {"sec-ch-ua-mobile", "?1"},
-                    //        {"sec-ch-ua-platform", "\"Android\""},
-                    //        {"x-datadome-clientid", GetDataDome()}
-                    //    };
-                    //foreach (var header in headers)
-                    //{
-                    //    http.AddHeader(header.Key, header.Value);
-                    //}
 
                     string encryptedPass = MaHoaPassGarena(
                         MD5Hash(password),
@@ -238,26 +225,12 @@ namespace CheckInfoGas
                             {
                                 var cookies = http.Cookies.ToDictionary(x => x.Key, x => x.Value);
 
-                                var (infoStatus, mailStatus, fbStatus, idCard) = CheckInfoAccount(cookies, Proxy2);
+                                var userInfo = Garena.CheckInfoAccount(http, Proxy2);
 
-                                switch (infoStatus)
-                                {
-                                    case "User info does not exist or is null":
+                                status = $"{userInfo.IdCard}|{userInfo.EmailLK}|{userInfo.isConnectFb}|{userInfo.Status}";
+                                
 
-                                        SetStatusDataGridView(row, infoStatus);
-                                        break;
-                                    case "Error_Mail":
-                                        status = $"{idCard}|{mailStatus}|{fbStatus}|{infoStatus}";
-                                        break;
-                                    case "TTT":
-                                        status = $"{idCard}|{mailStatus}|{fbStatus}|{infoStatus}";
-                                        break;
-                                    case "FullTT":
-                                        status = $"{idCard}|{mailStatus}|{fbStatus}|{infoStatus}";
-                                        break;
-                                }
-
-                                fileName = infoStatus;
+                                fileName = userInfo.Status.ToString();
 
                                 if (string.IsNullOrEmpty(status))
                                     return;
@@ -321,6 +294,61 @@ namespace CheckInfoGas
                     SetStatusDataGridView(row, ex.Message);
                 }
             }
+        }
+
+        private Task CheckPerTask(DataGridViewRow row, string username, string password)
+        {
+            //SetStatusDataGridView(row, "Get V1, v2");
+            string v1 = string.Empty, v2 = string.Empty;
+
+            for (int i = 0; i < 5; i++)
+            {
+                (v1, v2) = GetDataHashPassword(username);
+
+                if (!string.IsNullOrEmpty(v1) && !string.IsNullOrEmpty(v2) || v1.Equals("error_no_account"))
+                {
+                    break;
+                }
+
+                Task.Delay(1000).Wait();
+            }
+
+            if (string.IsNullOrEmpty(v1) || string.IsNullOrEmpty(v2) || v1.Equals("error_no_account"))
+            {
+                //SetStatusDataGridView(row, "V1, v2 is null");
+                return Task.CompletedTask;
+            }
+
+            string encryptedPass = MaHoaPassGarena(
+                        MD5Hash(password),
+                        SHA256Hash(SHA256Hash(MD5Hash(password) + v1) + v2)
+                    );
+
+            var (http, status) = Garena.CheckLogin(username, encryptedPass);
+
+            switch (status)
+            {
+                case Garena.StatusLogin.Ok:
+                    var userInfo = Garena.CheckInfoAccount(http, "");
+                    var a = Garena.GetTokenGrant(http);
+                    Garena.LoginFCO(http, a);
+                    break;
+                case Garena.StatusLogin.Ban:
+                    //SetStatusDataGridView(row, "Ban Account");
+                    return Task.CompletedTask;
+                case Garena.StatusLogin.Empty:
+                    //SetStatusDataGridView(row, "Không có data");
+                    return Task.CompletedTask;
+                case Garena.StatusLogin.Auth:
+                    //SetStatusDataGridView(row, "Wrong password");
+                    return Task.CompletedTask;
+                case Garena.StatusLogin.Spam:
+                    //SetStatusDataGridView(row, "Spam ip");
+                    return Task.CompletedTask;
+            }
+
+            
+            return Task.CompletedTask;
         }
 
         private void SetStatusDataGridView(DataGridViewRow row, string status)
@@ -413,66 +441,55 @@ namespace CheckInfoGas
             return ("", "", "", "");
         }
 
-        private (string, string, string, string) CheckInfoAccount(Dictionary<string, string> cookies, string proxy)
+        private async void CheckFo4(HttpRequest http)
         {
-            using (var http = new HttpRequest())
+            var response2 = http.Get("https://auth.garena.com/oauth/login?client_id=100072&redirect_uri=https%3A%2F%2Franking.fconline.garena.vn%2Flogin%2Fcallback&response_type=token&platform=1&locale=vi-VN").ToString();
+
+
+            var parameters = new xNet.FormUrlEncodedContent(new[]
+                {
+                    new KeyValuePair<string, string>("client_id", "32837"),
+                    new KeyValuePair<string, string>("redirect_uri", "https://ranking.fo4.garena.vn/login/callback"),
+                    new KeyValuePair<string, string>("response_type", "token"),
+                    new KeyValuePair<string, string>("platform", "1"),
+                    new KeyValuePair<string, string>("locale", "vi-VN"),
+                    new KeyValuePair<string, string>("format", "json"),
+                    new KeyValuePair<string, string>("id", "1710952555792"),
+                    new KeyValuePair<string, string>("app_id", "32837")
+                });
+
+            var response = http.Post("https://auth.garena.com/oauth/token/grant", parameters).ToString();
+            string redirectUri = "";
+            var data3 = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(response);
+            redirectUri = data3["redirect_uri"];
+            var redirectSource = http.Get(redirectUri).ToString();
+            var cookies = http.Cookies.ToDictionary(x => x.Key, x => x.Value);
+            var sessionId = cookies.Where(x => x.Key.Equals("sessionid")).FirstOrDefault().Value;
+            var csrfToken = cookies.Where(x => x.Key.Equals("csrftoken")).FirstOrDefault().Value;
+            HttpRequest httpRequest = new HttpRequest
             {
-                http.Cookies = new CookieDictionary();
-                foreach (var cookie in cookies)
-                {
-                    try
-                    {
-                        http.Cookies.Add(cookie.Key, cookie.Value);
-                    }
-                    catch { }
-                }
-                http.Proxy = HttpProxyClient.Parse(proxy);
-                var urlCheckInfo = "https://account.garena.com/api/account/init";
-                var responseInfo = http.Get(urlCheckInfo).ToString();
-                var initObject = JObject.Parse(responseInfo);
-                if (initObject.ContainsKey("user_info"))
-                {
-                    var infoStatus = string.Empty;
-                    var phoneNumber = initObject["user_info"]["mobile_no"].ToString();
-                    var checkPhone = phoneNumber.Contains("*") ? true : false;
+                Cookies = new CookieDictionary(),
+                UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                Referer = "https://ranking.fconline.garena.vn/thong-tin"
+            };
 
-                    var emailVerification = initObject["user_info"]["email_v"].ToString();
-                    var checkEmail = emailVerification.Equals("0") ? false : true;
-
-                    var checkFb = string.Empty;
-                    var fbUid = Regex.Match(responseInfo, "fb_uid\":\"(.*?)\"").Groups[1].Value;
-                    if (string.IsNullOrEmpty(fbUid))
-                    {
-                        checkFb = "NOT LK";
-                    }
-                    else
-                    {
-                        var fbStatus = CheckLiveFb(fbUid);
-                        checkFb = fbStatus ? "Live" : "Die";
-                    }
-
-                    var checkIdCard = initObject.ContainsKey("idcard") ? true : false;
-
-                    if (checkPhone == true)
-                    {
-                        infoStatus = "FullTT";
-                    }
-                    else if (checkEmail == true)
-                    {
-                        infoStatus = "Error_Mail";
-                    }
-                    else if (checkEmail == false && checkPhone == false)
-                    {
-                        infoStatus = "TTT";
-                    }
-
-                    return (infoStatus, checkEmail ? "Yes" : "No", checkFb, checkIdCard ? "Yes" : "No");
-                }
-                else
-                {
-                    return ("User info does not exist or is null", "", "", "");
-                }
+            httpRequest.Cookies.Add("csrftoken", csrfToken);
+            httpRequest.Cookies.Add("sessionid", sessionId);
+            httpRequest.AddHeader("X-Csrftoken", csrfToken);
+            httpRequest.AddHeader("Sec-Fetch-Site", "same-origin");
+            httpRequest.AddHeader("Sec-Fetch-Mode", "cors");
+            try
+            {
+                var game = httpRequest.Get("https://ranking.fconline.garena.vn/api/game/get").ToString();
+                var hof = httpRequest.Get("https://ranking.fconline.garena.vn/api/hof/get").ToString();
+                var profile = httpRequest.Get("https://ranking.fconline.garena.vn/api/user/profile").ToString();
             }
+            catch { }
+            http.Referer = "https://ranking.fconline.garena.vn/thong-tin";
+            http.AddHeader("X-Csrftoken", csrfToken);
+            http.AddHeader("Sec-Fetch-Site", "same-origin");
+            http.AddHeader("Sec-Fetch-Mode", "cors");
+            var profile2 = httpRequest.Get("https://ranking.fconline.garena.vn/api/user/profile").ToString();
         }
 
         private string MaHoaPassGarena(string plaintext, string key)
@@ -572,6 +589,7 @@ namespace CheckInfoGas
         {
             try
             {
+                Proxy = "as.lunaproxy.com:12233:user-apichaylq111-region-sg:apichaylq111";
                 var proxyRaw = Proxy.Split(':');
                 var http = new HttpRequest
                 {
@@ -579,9 +597,10 @@ namespace CheckInfoGas
                     Proxy = HttpProxyClient.Parse($"{proxyRaw[0]}:{proxyRaw[1]}"),
                     KeepAlive = true,
                     EnableEncodingContent = true,
-                    UserAgent = "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+                    UserAgent = "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
                     Referer = "https://sso.garena.com/universal/login?app_id=10100&redirect_uri=https%3A%2F%2Faccount.garena.com%2F&locale=vi-VN"
                 };
+
                 http.Proxy.Username = proxyRaw[2];
                 http.Proxy.Password = proxyRaw[3];
                 long id = DateTimeOffset.Now.ToUnixTimeMilliseconds() / 1000;
@@ -589,21 +608,17 @@ namespace CheckInfoGas
                 var headers = new Dictionary<string, string>
                 {
                     {"Accept", "application/json, text/plain, */*"},
-                    //{"Accept-Encoding", "gzip, deflate, br"},
                     {"Accept-Language", "vi,vi-VN;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5"},
-                    //{"Connection", "keep-alive"},
-                    {"Cookie", "_ga=GA1.1.1629491323.1706450848; token_session=c17e119c61460aab0b4a2024157a11b244f5430627c9566b0a8f702adb5f573a3edc9cb577dc1f4dbbe5f948e18d8c6e; _ga_1M7M9L6VPX=GS1.1.1708017064.12.1.1708017065.0.0.0; datadome=" + dataDome},
-                    //{"Host", "sso.garena.com"},
-                    //{"Referer", "https://sso.garena.com/universal/login?app_id=10100&redirect_uri=https%3A%2F%2Faccount.garena.com%2F&locale=vi-VN"},
+                    {"Cookie", "_ga_XB5PSHEQB4=GS1.1.1717740204.1.1.1717741125.0.0.0; _ga_ZVT4QTM70P=GS1.1.1717860132.1.0.1717860135.0.0.0; _ga_KE3SY7MRSD=GS1.1.1718120539.1.1.1718120539.0.0.0; _ga_RF9R6YT614=GS1.1.1718120542.1.0.1718120542.0.0.0; _ga=GA1.1.1225644985.1717685902; token_session=f9094272506759b10a3ae8aaf49fd45c60d3f80f866c302a077714e1dba6e468a6897fae30d7ee89d4cfb031d4b9e549; _ga_G8QGMJPWWV=GS1.1.1719149637.14.1.1719151040.0.0.0; datadome=" + dataDome + "; _ga_1M7M9L6VPX=GS1.1.1719318965.10.0.1719318965.0.0.0"},
                     {"Sec-Fetch-Dest", "empty"},
                     {"Sec-Fetch-Mode", "cors"},
                     {"Sec-Fetch-Site", "same-origin"},
-                    //{"User-Agent", "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"},
-                    {"sec-ch-ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\""},
+                    {"sec-ch-ua", "\"Not/A)Brand\";v=\"8\", \"Chromium\";v=\"126\", \"Google Chrome\";v=\"126\""},
                     {"sec-ch-ua-mobile", "?1"},
                     {"sec-ch-ua-platform", "\"Android\""},
                     {"x-datadome-clientid", dataDome}
                 };
+
                 foreach (var header in headers)
                 {
                     if (header.Key.Equals("Cookie"))
@@ -625,7 +640,7 @@ namespace CheckInfoGas
                     }
                 }
 
-                var response = http.Get($"https://sso.garena.com/api/prelogin?account={account}&format=json&id={id}&app_id=10043").ToString();
+                var response = http.Get($"https://100054.connect.garena.com/api/prelogin?app_id=10100&account={account}&format=json&id=1719452510767").ToString();
                 if (response.Contains("error_no_account"))
                     return ("error_no_account", "");
                 var v1 = JObject.Parse(response)["v1"].ToString();
@@ -633,7 +648,7 @@ namespace CheckInfoGas
 
                 return (v1, v2);
             }
-            catch
+            catch (Exception)
             {
                 return ("", "");
             }

@@ -13,7 +13,7 @@ namespace CheckInfoGas
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new fCheckKey());
+            Application.Run(new Form1("Full"));
         }
     }
 }
