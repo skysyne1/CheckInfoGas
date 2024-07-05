@@ -14,7 +14,7 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="xNet">
-      <HintPath>..\..\..\..\Project\xNet.dll</HintPath>
+      <HintPath>..\..\..\Users\chanhnt\Desktop\C#\C#\LearnRequest\bin\Debug\xNet.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>

@@ -20,6 +20,26 @@
 
         public bool IdCard { get; set; } = false;
 
-        public InfoStatus Status { get; set; }
+        public FO4 FO4Info { get; set; } = new FO4();
+
+        public LienQuan LienQuanInfo { get; set; } = new LienQuan();
+
+        public InfoStatus? Status { get; set; }
+
+        public class FO4
+        {
+            public string TeamValues { get; set; }
+
+            public string Balance { get; set; }
+        }
+
+        public class LienQuan
+        {
+            public string Skin { get; set; }
+
+            public string Rank { get; set; }
+
+            public string Name { get; set; }
+        }
     }
 }

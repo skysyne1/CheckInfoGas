@@ -1,14 +1,10 @@
-﻿using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
-using System.Net;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using xNet;
-using System;
-using System.Net.Http.Headers;
-using HttpMethod = System.Net.Http.HttpMethod;
 
 namespace CheckInfoGas
 {
@@ -97,7 +93,6 @@ namespace CheckInfoGas
                 else if (checkEmail == true)
                 {
                     userInfo.Status = UserInfo.InfoStatus.Error_Email;
-                    checkEmail = true;
                 }
                 else if (checkEmail == false && checkPhone == false)
                 {
@@ -115,55 +110,155 @@ namespace CheckInfoGas
             }
         }
 
-        public static string GetTokenGrant(HttpRequest http)
+        public static void LoginFCO(Dictionary<string, string> Cookies, UserInfo userInfo)
         {
-            var payload = "client_id=100054&response_type=token&redirect_uri=https%3A%2F%2Fsale.lienquan.garena.vn%2Flogin%2Fcallback&format=json&id=21435678908765432";
-            var response = http.Post("https://auth.garena.com/oauth/token/grant", payload, "application/x-www-form-urlencoded").ToString();
-            var responseObject = JObject.Parse(response);
-            var token = responseObject["access_token"].ToString();
-            return token;
+            var http = new HttpRequest
+            {
+                Cookies = new CookieDictionary(),
+            };
+
+            http.AddCookie(Cookies);
+            var postData = new Dictionary<string, string>
+                {
+                    { "client_id", "32837" },
+                    { "redirect_uri", "https://ranking.fo4.garena.vn/login/callback" },
+                    { "response_type", "token" },
+                    { "platform", "1" },
+                    { "locale", "vi-VN" }
+                };
+            var content = new xNet.FormUrlEncodedContent(postData);
+            var postResponse = http.Post("https://auth.garena.com/oauth/token/grant", content).ToString();
+            var data3 = JObject.Parse(postResponse);
+            var link = data3["redirect_uri"].ToString();
+            var profileResponse11 = http.Get(link).ToString();
+            var profileResponse = http.Get("https://ranking.fo4.garena.vn/api/user/profile").ToString();
+            
+            var profileObject = JObject.Parse(profileResponse);
+            if (profileObject.ContainsKey("payload"))
+            {
+                var balance = FormatNumberWithComma(profileObject["payload"]["balance"].ToString());
+                var teamPrice = FormatNumberWithComma(profileObject["payload"]["team_price"].ToString());
+                userInfo.FO4Info = new UserInfo.FO4
+                {
+                    Balance = balance,
+                    TeamValues = teamPrice
+                };
+            }
         }
 
-        public static async void LoginFCO(HttpRequest http, string accessToken)
+        public static UserInfo CheckRankLQ(HttpRequest http, UserInfo userInfo)
         {
-            HttpClientHandler httpHandler = new HttpClientHandler();
+            var postData = new Dictionary<string, string>
+                {
+                    { "client_id", "100054" },
+                    { "response_type", "token" },
+                    { "redirect_uri", "https://sale.lienquan.garena.vn/login/callback" },
+                    { "format", "json" },
+                    { "id", "32546780697654" }
+                };
+            var content = new xNet.FormUrlEncodedContent(postData);
+            var postResponse = http.Post("https://auth.garena.com/oauth/token/grant", content).ToString();
 
-            httpHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
-            var client = new HttpClient(httpHandler);
-            client.DefaultRequestHeaders.Host = "ranking.fconline.garena.vn";
-            var request1 = new HttpRequestMessage(HttpMethod.Get, $"https://ranking.fconline.garena.vn/login/callback?access_token={accessToken}");
-            var response1 = await client.SendAsync(request1);
-            var request = new HttpRequestMessage(HttpMethod.Get, "https://ranking.fconline.garena.vn/api/user/profile");
-            var request2 = new HttpRequestMessage(HttpMethod.Get, "https://ranking.fconline.garena.vn/api/user/get");
-            var response2 = await client.SendAsync(request2);
-            //request.Headers.Add("Cookie", cookieString);
-            var response = await client.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            Console.WriteLine(await response.Content.ReadAsStringAsync());
+            var data3 = JObject.Parse(postResponse);
+            var link = data3["redirect_uri"].ToString();
+            var token = data3["access_token"].ToString();
 
-            //            var response = http.Get($"https://ranking.fconline.garena.vn/login/callback?access_token={accessToken}");
+            http.Cookies.Add("access-token", token);
+            string profileResponse11 = http.Get(link).ToString();
+            var postData1 = new
+            {
+                operationName = "getUser",
+                variables = new { },
+                query = @"query getUser {
+        getUser {
+          id
+          name
+          icon
+          profile {
+            ownedItemIdList
+            __typename
+          }
+          __typename
+        }
+      }"
+            };
 
-            //            var cookies = http.Cookies.ToDictionary();
-            //            var desiredCookies = cookies
-            //                   .Where(x => x.Key == "csrftoken" || x.Key == "sessionid")
-            //                   .ToDictionary(x => x.Key, x => x.Value);
-            //            var httpRequest = new HttpRequest();
-            //            httpRequest.Cookies = new CookieDictionary();
-            //            httpRequest.KeepAlive = true;
-            //            httpRequest.AddCookie(desiredCookies);
-            //            httpRequest.SslCertificateValidatorCallback +=
-            //delegate (object sender, System.Security.Cryptography.X509Certificates.X509Certificate certificate,
-            //                        System.Security.Cryptography.X509Certificates.X509Chain chain,
-            //                        System.Net.Security.SslPolicyErrors sslPolicyErrors)
-            //{
-            //    return true; // **** Always accept
-            //};
-            //            httpRequest.AddHeader("X-Csrftoken", desiredCookies["csrftoken"]);
-            //            httpRequest.UserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1";
-            //            var response2 = httpRequest.Get("https://ranking.fconline.garena.vn/api/user/get").ToString();
-            //            var response3 = httpRequest.Get("https://ranking.fconline.garena.vn/api/user/profile");
+            // Chuyển đối tượng thành chuỗi JSON
+            string jsonString = JsonConvert.SerializeObject(postData1);
+            string postResponse1 = http.Post("https://sale.lienquan.garena.vn/graphql", jsonString, "application/json").ToString();
+            var jsonResponse = JObject.Parse(postResponse1);
 
+            if (jsonResponse["errors"] != null && jsonResponse["errors"].Any(e => e["message"].ToString() == "NOT_LOGIN"))
+            {
+                return userInfo;
+            }
 
+            var ownedItemIdList = jsonResponse["data"]["getUser"]["profile"]["ownedItemIdList"] as JArray;
+            int itemCount = ownedItemIdList.Count;
+            var name = jsonResponse["data"]["getUser"]["name"];
+
+            var url = "https://weeklyreport.moba.garena.vn/api/profile";
+            var headers = new Dictionary<string, string>
+                {
+                    { "accept", "application/json, text/plain, */*" },
+                    { "accept-language", "vi,vi-VN;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5" },
+                    { "access-token", token },
+                    { "partition", "1011" },
+                    { "priority", "u=1, i" },
+                    { "referer", "https://weeklyreport.moba.garena.vn/portrait/recall" },
+                    { "sec-fetch-dest", "empty" },
+                    { "sec-fetch-mode", "cors" },
+                    { "sec-fetch-site", "same-origin" },
+                    { "user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1" }
+                };
+
+            foreach (var header in headers)
+            {
+                http.AddHeader(header.Key, header.Value);
+            }
+
+            string check_rank = http.Get(url).ToString();
+
+            if (check_rank.Contains("ERROR__GAME_LOGIN_FAILED"))
+            {
+                return userInfo;
+            }
+
+            var data = JObject.Parse(check_rank);
+            var playerRank = data["player_info"]["rank"].ToString();
+            var rankConfig = data["rank_config"] as JObject;
+            string rankName = "";
+
+            foreach (var rank in rankConfig)
+            {
+                if (rank.Key == playerRank)
+                {
+                    rankName = rank.Value["name"].ToString();
+                    break;
+                }
+            }
+
+            userInfo.LienQuanInfo = new UserInfo.LienQuan
+            {
+                Name = name.ToString(),
+                Rank = rankName,
+                Skin = itemCount.ToString()
+            };
+
+            return userInfo;
+        }
+
+        private static string FormatNumberWithComma(string numberString)
+        {
+            if (string.IsNullOrEmpty(numberString))
+                return "";
+
+            decimal number;
+            if (decimal.TryParse(numberString, out number))
+            {
+                return number.ToString("#,##0");
+            }
+            return "";
         }
     }
 }

