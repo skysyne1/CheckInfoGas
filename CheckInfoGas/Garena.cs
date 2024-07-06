@@ -1,9 +1,8 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using xNet;
 
 namespace CheckInfoGas
@@ -19,95 +18,69 @@ namespace CheckInfoGas
             Spam
         }
 
-        public static (HttpRequest, StatusLogin) CheckLogin(string username, string encryptPassword)
+        public static Task<(HttpRequest, StatusLogin)> CheckLogin(ApiClient apiClient, string username, string encryptPassword)
         {
-            using (var http = new HttpRequest())
+            return Task.Run(() =>
             {
-                http.Cookies = new CookieDictionary();
-                http.UserAgent = "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36";
-                http.KeepAlive = true;
-                http.EnableEncodingContent = true;
-
-                var response = http.Get($"https://connect.garena.com/api/login?account={username}&password={encryptPassword}&format=json&app_id=10100").ToString();
+                string response = apiClient.HttpClient.Get($"https://connect.garena.com/api/login?account={username}&password={encryptPassword}&format=json&app_id=10100").ToString();
 
                 if (response.Contains("error_auth"))
-                {
-                    return (http, StatusLogin.Auth);
-                }
-                else if (response.Contains("error_suspicious_ip"))
-                {
-                    return (http, StatusLogin.Spam);
-                }
-                else if (response.Contains("error_user_ban"))
-                {
-                    return (http, StatusLogin.Ban);
-                }
-                else if (string.IsNullOrEmpty(response))
-                {
-                    return (http, StatusLogin.Empty);
-                }
+                    return (apiClient.HttpClient, StatusLogin.Auth);
+                if (response.Contains("error_suspicious_ip"))
+                    return (apiClient.HttpClient, StatusLogin.Spam);
+                if (response.Contains("error_user_ban"))
+                    return (apiClient.HttpClient, StatusLogin.Ban);
+                if (string.IsNullOrEmpty(response))
+                    return (apiClient.HttpClient, StatusLogin.Empty);
 
-                return (http, StatusLogin.Ok);
-            }
+                return (apiClient.HttpClient, StatusLogin.Ok);
+            });
         }
 
-        public static UserInfo CheckInfoAccount(HttpRequest http, string proxy)
+        public static Task<UserInfo> CheckInfoAccount(ApiClient apiClient)
         {
-            var urlCheckInfo = "https://account.garena.com/api/account/init";
-            var responseInfo = http.Get(urlCheckInfo).ToString();
-            var initObject = JObject.Parse(responseInfo);
-            var userInfo = new UserInfo();
-
-            if (initObject.ContainsKey("user_info"))
+            return Task.Run(() =>
             {
-                var infoStatus = string.Empty;
-                var phoneNumber = initObject["user_info"]["mobile_no"].ToString();
-                var checkPhone = phoneNumber.Contains("*") ? true : false;
+                apiClient.HttpClient.Referer = "";
+                var responseInfo = apiClient.HttpClient.Get(Constants.URLCheckInfo).ToString();
+                var initObject = JObject.Parse(responseInfo);
+                var userInfo = new UserInfo();
 
-                var emailVerification = initObject["user_info"]["email_v"].ToString();
-                var checkEmail = emailVerification.Equals("0") ? false : true;
-
-                var checkFb = string.Empty;
-                var testFb = http.Get("https://account.garena.com/fbSecurity/facebookConnect/init#").ToString();
-                var fbUid = Regex.Match(responseInfo, "fb_uid\":\"(.*?)\"").Groups[1].Value;
-                var fbAccount = Regex.Match(responseInfo, "fb_account\":(.*?)}").Groups[1].Value;
-                if (!fbAccount.Equals("null"))
+                if (initObject.ContainsKey("user_info"))
                 {
-                    var fbAccountObject = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>($"{fbAccount}}}");
-                    if (string.IsNullOrEmpty(fbAccountObject["fb_username"].ToString()))
+                    var userInfoObject = initObject["user_info"];
+                    var phoneNumber = userInfoObject["mobile_no"].ToString();
+                    var emailVerification = userInfoObject["email_v"].ToString();
+                    var checkPhone = phoneNumber.Contains("*");
+                    var checkEmail = emailVerification != "0";
+
+                    var testFb = apiClient.HttpClient.Get("https://account.garena.com/fbSecurity/facebookConnect/init#").ToString();
+                    var fbAccount = Regex.Match(responseInfo, "fb_account\":(.*?)}").Groups[1].Value;
+
+                    if (!fbAccount.Equals("null"))
                     {
-                        userInfo.isConnectFb = true;
+                        var fbAccountObject = JsonConvert.DeserializeObject<dynamic>($"{fbAccount}}}");
+                        userInfo.isConnectFb = !string.IsNullOrEmpty(fbAccountObject["fb_username"].ToString());
                     }
+                    else
+                    {
+                        userInfo.isConnectFb = false;
+                    }
+
+                    userInfo.IdCard = !string.IsNullOrEmpty(Regex.Match(responseInfo, "idcard\":\"(.*?)\"").Groups[1].Value);
+
+                    userInfo.Status = checkPhone ? UserInfo.InfoStatus.FullTT
+                                     : checkEmail ? UserInfo.InfoStatus.Error_Email
+                                     : UserInfo.InfoStatus.TTT;
+
+                    return userInfo;
                 }
                 else
                 {
-                    userInfo.isConnectFb = false;
+                    userInfo.Status = UserInfo.InfoStatus.NotExist;
+                    return userInfo;
                 }
-
-                userInfo.IdCard = string.IsNullOrEmpty(Regex.Match(responseInfo, "idcard\":\"(.*?)\"").Groups[1].Value) ? false : true;
-
-                if (checkPhone == true)
-                {
-                    userInfo.Status = UserInfo.InfoStatus.FullTT;
-                }
-                else if (checkEmail == true)
-                {
-                    userInfo.Status = UserInfo.InfoStatus.Error_Email;
-                }
-                else if (checkEmail == false && checkPhone == false)
-                {
-                    userInfo.Status = UserInfo.InfoStatus.TTT;
-                }
-
-
-
-                return userInfo;
-            }
-            else
-            {
-                userInfo.Status = UserInfo.InfoStatus.NotExist;
-                return userInfo;
-            }
+            });
         }
 
         public static void LoginFCO(Dictionary<string, string> Cookies, UserInfo userInfo)
@@ -146,107 +119,125 @@ namespace CheckInfoGas
             }
         }
 
-        public static UserInfo CheckRankLQ(HttpRequest http, UserInfo userInfo)
+        public static Task<UserInfo> CheckRankLQ(ApiClient apiClient, UserInfo userInfo)
+        {
+            return Task.Run(() =>
+            {
+                var token = GetAccessToken(apiClient);
+                if (token == null)
+                    return userInfo;
+
+                var graphqlResponse = GetGraphQLResponse(apiClient, token);
+                if (graphqlResponse == null || graphqlResponse.ContainsKey("errors"))
+                    return userInfo;
+
+                var ownedItemIdList = graphqlResponse["data"]["getUser"]["profile"]["ownedItemIdList"] as JArray;
+                var name = graphqlResponse["data"]["getUser"]["name"].ToString();
+
+                var playerRank = GetPlayerRank(apiClient, token);
+                if (playerRank == null)
+                    return userInfo;
+
+                var rankConfig = playerRank["rank_config"] as JObject;
+                var playerRankId = playerRank["player_info"]["rank"].ToString();
+                var rankName = GetRankName(rankConfig, playerRankId);
+
+                userInfo.LienQuanInfo = new UserInfo.LienQuan
+                {
+                    Name = name,
+                    Rank = rankName,
+                    Skin = ownedItemIdList?.Count.ToString() ?? "0"
+                };
+
+                return userInfo;
+            });
+        }
+
+        private static JObject GetAccessToken(ApiClient apiClient)
         {
             var postData = new Dictionary<string, string>
-                {
-                    { "client_id", "100054" },
-                    { "response_type", "token" },
-                    { "redirect_uri", "https://sale.lienquan.garena.vn/login/callback" },
-                    { "format", "json" },
-                    { "id", "32546780697654" }
-                };
+            {
+                { "client_id", "100054" },
+                { "response_type", "token" },
+                { "redirect_uri", "https://sale.lienquan.garena.vn/login/callback" },
+                { "format", "json" },
+                { "id", "32546780697654" }
+            };
+
             var content = new xNet.FormUrlEncodedContent(postData);
-            var postResponse = http.Post("https://auth.garena.com/oauth/token/grant", content).ToString();
+            var postResponse = apiClient.HttpClient.Post("https://auth.garena.com/oauth/token/grant", content).ToString();
+            var data = JObject.Parse(postResponse);
 
-            var data3 = JObject.Parse(postResponse);
-            var link = data3["redirect_uri"].ToString();
-            var token = data3["access_token"].ToString();
+            apiClient.HttpClient.Cookies.Add("access-token", data["access_token"].ToString());
 
-            http.Cookies.Add("access-token", token);
-            string profileResponse11 = http.Get(link).ToString();
-            var postData1 = new
+            return data;
+        }
+
+        private static JObject GetGraphQLResponse(ApiClient apiClient, JObject token)
+        {
+            var postData = new
             {
                 operationName = "getUser",
                 variables = new { },
                 query = @"query getUser {
-        getUser {
-          id
-          name
-          icon
-          profile {
-            ownedItemIdList
-            __typename
-          }
-          __typename
-        }
-      }"
+  getUser {
+    id
+    name
+    icon
+    profile {
+      ownedItemIdList
+      __typename
+    }
+    __typename
+  }
+}"
             };
 
-            // Chuyển đối tượng thành chuỗi JSON
-            string jsonString = JsonConvert.SerializeObject(postData1);
-            string postResponse1 = http.Post("https://sale.lienquan.garena.vn/graphql", jsonString, "application/json").ToString();
-            var jsonResponse = JObject.Parse(postResponse1);
+            string jsonString = JsonConvert.SerializeObject(postData);
+            string postResponse = apiClient.HttpClient.Post("https://sale.lienquan.garena.vn/graphql", jsonString, "application/json").ToString();
 
-            if (jsonResponse["errors"] != null && jsonResponse["errors"].Any(e => e["message"].ToString() == "NOT_LOGIN"))
-            {
-                return userInfo;
-            }
+            return JObject.Parse(postResponse);
+        }
 
-            var ownedItemIdList = jsonResponse["data"]["getUser"]["profile"]["ownedItemIdList"] as JArray;
-            int itemCount = ownedItemIdList.Count;
-            var name = jsonResponse["data"]["getUser"]["name"];
-
+        private static JObject GetPlayerRank(ApiClient apiClient, JObject token)
+        {
             var url = "https://weeklyreport.moba.garena.vn/api/profile";
             var headers = new Dictionary<string, string>
-                {
-                    { "accept", "application/json, text/plain, */*" },
-                    { "accept-language", "vi,vi-VN;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5" },
-                    { "access-token", token },
-                    { "partition", "1011" },
-                    { "priority", "u=1, i" },
-                    { "referer", "https://weeklyreport.moba.garena.vn/portrait/recall" },
-                    { "sec-fetch-dest", "empty" },
-                    { "sec-fetch-mode", "cors" },
-                    { "sec-fetch-site", "same-origin" },
-                    { "user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1" }
-                };
+            {
+                { "accept", "application/json, text/plain, */*" },
+                { "accept-language", "vi,vi-VN;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5" },
+                { "access-token", token["access_token"].ToString() },
+                { "partition", "1011" },
+                { "priority", "u=1, i" },
+                { "referer", "https://weeklyreport.moba.garena.vn/portrait/recall" },
+                { "sec-fetch-dest", "empty" },
+                { "sec-fetch-mode", "cors" },
+                { "sec-fetch-site", "same-origin" },
+                { "user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1" }
+            };
 
             foreach (var header in headers)
             {
-                http.AddHeader(header.Key, header.Value);
+                apiClient.HttpClient.AddHeader(header.Key, header.Value);
             }
 
-            string check_rank = http.Get(url).ToString();
+            string check_rank = apiClient.HttpClient.Get(url).ToString();
 
-            if (check_rank.Contains("ERROR__GAME_LOGIN_FAILED"))
-            {
-                return userInfo;
-            }
+            return check_rank.Contains("ERROR__GAME_LOGIN_FAILED") ? null : JObject.Parse(check_rank);
+        }
 
-            var data = JObject.Parse(check_rank);
-            var playerRank = data["player_info"]["rank"].ToString();
-            var rankConfig = data["rank_config"] as JObject;
-            string rankName = "";
-
+        private static string GetRankName(JObject rankConfig, string playerRankId)
+        {
             foreach (var rank in rankConfig)
             {
-                if (rank.Key == playerRank)
+                if (rank.Key == playerRankId)
                 {
-                    rankName = rank.Value["name"].ToString();
-                    break;
+                    return rank.Value["name"].ToString();
                 }
             }
-
-            userInfo.LienQuanInfo = new UserInfo.LienQuan
-            {
-                Name = name.ToString(),
-                Rank = rankName,
-                Skin = itemCount.ToString()
-            };
-
-            return userInfo;
+            return "";
         }
+
 
         private static string FormatNumberWithComma(string numberString)
         {
